@@ -1,0 +1,5 @@
+# Supabase 로컬 설정 (참고용 최소본). `supabase init` 로 전체 생성 권장.
+project_id = "raid-receipt"
+
+[functions.discord-send]
+verify_jwt = true

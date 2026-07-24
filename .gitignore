@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+dist-ssr/
+/out-tsc
+
+# TypeScript incremental build cache
+.tscache/
+*.tsbuildinfo
+
+# Turborepo
+.turbo/
+
+# Logs
+logs/
+*.log
+pnpm-debug.log*
+
+# Tests
+coverage/
+
+# Environment
+.env
+.env.*.local
+*.local
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/settings.json
