@@ -59,8 +59,12 @@ export function GuildSettingsPage() {
         <Card className="space-y-4 p-5 lg:col-span-2">
           <h2 className="text-card-title">정산 정책</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="기본 뽀찌율" value="10%" hint="공대장 몫" />
-            <Field label="공대장 분배 포함" value="아니오" />
+            <Field label="기본 뽀찌율" value="0%" hint="공대장 몫 · 레이드마다 바꿀 수 있습니다" />
+            <Field
+              label="기본 판매 수수료율"
+              value="5%"
+              hint="드랍템 행에 자동으로 채워집니다 · 직거래는 0으로"
+            />
           </div>
           <p className="text-text-tertiary text-xs">
             ※ 잔돈 처리는 공대별로 설정합니다. (공대 구성 화면)

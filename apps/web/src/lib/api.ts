@@ -245,6 +245,18 @@ export function removeMember(guildId: string, memberId: string): Promise<void> {
 }
 
 // ─── 보스 마스터 (SYS 공용, §9 시드) ──────────────────────
+/**
+ * 이탈 시점 셀렉트에 처음 보여줄 페이즈 개수.
+ *
+ * 재분배 계산은 페이즈의 "순서"만 비교하므로(2페 < 3페 < 완주) 보스별 실제 페이즈 수를
+ * 정확히 알 필요가 없다. 이 값은 선택지를 몇 개 그릴지에만 쓰이고, 모자라면 레이드
+ * 화면에서 그 자리에서 늘린다 → 보스 마스터에 페이즈 수를 관리할 필요가 없다.
+ */
+export const DEFAULT_PHASE_COUNT = 3;
+
+/** 이탈 페이즈 상한 — 실수로 무한정 늘리는 걸 막는 안전장치 */
+export const MAX_PHASE_COUNT = 20;
+
 export interface Boss {
   id: string;
   name: string;
@@ -316,33 +328,60 @@ export function deleteServer(id: string): Promise<void> {
 
 // ─── 길드 정산 정책 (guild_settings §9) ───────────────────
 export interface GuildSettings {
-  /** 뽀찌율 0~1 */
+  /** 기본 뽀찌율 0~1. 뽀찌를 안 걷는 길드가 많아 기본값은 0 */
   ppojiRate: number;
-  /** 공대장 분배 포함 여부 */
-  leaderInSplit: boolean;
+  /** 기본 판매 수수료 % (경매장). 드랍템 행마다 자동으로 채워지고 개별 수정 가능 */
+  defaultFeePct: number;
 }
 
 export function getGuildSettings(_guildId: string): Promise<GuildSettings> {
-  return delay({ ppojiRate: 0.1, leaderInSplit: false });
+  return delay({ ppojiRate: 0, defaultFeePct: 5 });
 }
 
 // ─── 레이드 생성 ──────────────────────────────────────────
 // 레이드 상세 (편집·복원용) — RaidRow 는 목록 요약, RaidDetail 은 입력 원본
 export interface RaidDrop {
   name: string;
+  /** 실제 판매가 — 수수료 떼기 전 */
   salePrice: number;
+  /** 판매 수수료 % (0~100). 직거래면 0 */
+  feePct: number;
 }
-export interface RaidMaterial {
+/**
+ * 공대 경비 = 레이드에서 "쓴 돈" 전부. 소모품·입장료·기타를 한 카드에서 입력받는다.
+ * 용병은 더 이상 비용이 아니라 n빵 참여자(RaidParticipant.guestName)로 들어간다.
+ */
+export type ExpenseCategory = 'consumable' | 'entry' | 'etc';
+
+export const EXPENSE_CATEGORIES: ExpenseCategory[] = ['consumable', 'entry', 'etc'];
+
+export const EXPENSE_CATEGORY_LABEL: Record<ExpenseCategory, string> = {
+  consumable: '소모품',
+  entry: '입장료',
+  etc: '기타',
+};
+
+export const EXPENSE_CATEGORY_PLACEHOLDER: Record<ExpenseCategory, string> = {
+  consumable: '예: 엘릭서 100개',
+  entry: '예: 입장권 6장',
+  etc: '예: 물약 셔틀 수고비',
+};
+
+export interface RaidExpense {
+  category: ExpenseCategory;
   name: string;
   cost: number;
 }
-export interface RaidMerc {
-  name: string;
-  fee: number;
-}
+
 export interface RaidParticipant {
-  memberId: string;
-  penaltyTypeId: string | null;
+  /** 길드원 참여자 id. 임시 용병이면 null */
+  memberId: string | null;
+  /** 임시 용병 이름. 길드원이면 null */
+  guestName: string | null;
+  /** 한 사람에게 여러 개가 붙을 수 있다 (예: 2페 이탈 + 지각) */
+  penaltyTypeIds: string[];
+  /** 이탈 페이즈(1부터). null = 완주 */
+  exitPhase: number | null;
 }
 
 export interface RaidDetail {
@@ -352,9 +391,10 @@ export interface RaidDetail {
   partyName: string | null;
   ppojiPct: number;
   remainderPolicy: RemainderPolicy;
+  /** 이 레이드에서 쓴 이탈 페이즈 선택지 개수 (사용자가 늘렸으면 그 값) */
+  phaseCount: number;
   drops: RaidDrop[];
-  materials: RaidMaterial[];
-  mercs: RaidMerc[];
+  expenses: RaidExpense[];
   participants: RaidParticipant[];
 }
 
@@ -372,16 +412,16 @@ const RAID_DETAILS: Record<string, RaidDetail> = {
     partyName: '1공대 (자쿰)',
     ppojiPct: 10,
     remainderPolicy: 'fund',
-    drops: [{ name: '', salePrice: 0 }],
-    materials: [],
-    mercs: [],
+    phaseCount: DEFAULT_PHASE_COUNT,
+    drops: [{ name: '', salePrice: 0, feePct: 5 }],
+    expenses: [],
     participants: [
-      { memberId: 'm2', penaltyTypeId: null },
-      { memberId: 'm1', penaltyTypeId: null },
-      { memberId: 'm3', penaltyTypeId: null },
-      { memberId: 'm5', penaltyTypeId: null },
-      { memberId: 'm10', penaltyTypeId: null },
-      { memberId: 'm8', penaltyTypeId: null },
+      { memberId: 'm2', guestName: null, penaltyTypeIds: [], exitPhase: null },
+      { memberId: 'm1', guestName: null, penaltyTypeIds: [], exitPhase: null },
+      { memberId: 'm3', guestName: null, penaltyTypeIds: [], exitPhase: null },
+      { memberId: 'm5', guestName: null, penaltyTypeIds: [], exitPhase: null },
+      { memberId: 'm10', guestName: null, penaltyTypeIds: [], exitPhase: null },
+      { memberId: 'm8', guestName: null, penaltyTypeIds: [], exitPhase: null },
     ],
   },
 };
@@ -400,9 +440,9 @@ export interface RaidInput {
   partyName: string | null;
   ppojiPct: number;
   remainderPolicy: RemainderPolicy;
+  phaseCount: number;
   drops: RaidDrop[];
-  materials: RaidMaterial[];
-  mercs: RaidMerc[];
+  expenses: RaidExpense[];
   participants: RaidParticipant[];
   netProfit: number;
   participantCount: number;
@@ -453,9 +493,9 @@ export function saveRaid(guildId: string, input: RaidInput): Promise<RaidRow> {
     partyName: input.partyName,
     ppojiPct: input.ppojiPct,
     remainderPolicy: input.remainderPolicy,
+    phaseCount: input.phaseCount,
     drops: input.drops,
-    materials: input.materials,
-    mercs: input.mercs,
+    expenses: input.expenses,
     participants: input.participants,
   };
 
