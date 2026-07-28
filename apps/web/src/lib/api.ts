@@ -5,6 +5,7 @@
  * DB 연결 시 각 함수의 "속"만 Supabase 호출로 교체하면 화면은 무수정.
  */
 import { useGuildStore } from '@/stores/useGuildStore';
+import { DEFAULT_COOLDOWN_HOURS } from '@/lib/bossTimer';
 
 export type RaidStatus = 'draft' | 'confirmed';
 
@@ -109,6 +110,14 @@ export interface Member {
   job: string;
   level: number;
   role: MemberRole;
+  /**
+   * 활동 여부. 길드를 떠난 사람은 삭제가 아니라 false 로 둔다.
+   *
+   * 삭제하면 raid_participants.member_id 가 끊겨 과거 레이드의 참여자가 누구였는지,
+   * 참여도 집계가 통째로 사라진다. 비활성은 "앞으로 뽑지 않는다"는 뜻일 뿐이고
+   * 지난 기록은 그대로 남는다.
+   */
+  isActive: boolean;
 }
 
 /** 직업 대분류 → 세부 직업 */
@@ -152,31 +161,40 @@ export function groupMembersByJob(members: Member[]): JobSection[] {
   })).filter((section) => section.members.length > 0);
 }
 
+// m4(도둑고양이)는 비활성 시드 — 비활성 탭과 "과거 이력은 남는다"(MEMBER_STATS 에 5회 참여)를
+// 바로 확인할 수 있게 해 둔다. 어느 공대에도 편성돼 있지 않아 공대 시드와 충돌하지 않는다.
 const MEMBERS: Record<string, Member[]> = {
   g1: [
-    { id: 'm1', guildId: 'g1', nickname: '흑우', jobCategory: '전사', job: '히어로', level: 200, role: 'MASTER' },
-    { id: 'm2', guildId: 'g1', nickname: '물풀', jobCategory: '마법사', job: '비숍', level: 195, role: 'MANAGER' },
-    { id: 'm3', guildId: 'g1', nickname: '라플', jobCategory: '궁수', job: '보우마스터', level: 190, role: 'MEMBER' },
-    { id: 'm4', guildId: 'g1', nickname: '도둑고양이', jobCategory: '도적', job: '나이트로드', level: 188, role: 'MEMBER' },
-    { id: 'm5', guildId: 'g1', nickname: '배주부', jobCategory: '마법사', job: '아크메이지(불,독)', level: 192, role: 'MEMBER' },
-    { id: 'm8', guildId: 'g1', nickname: '강철검', jobCategory: '전사', job: '팔라딘', level: 198, role: 'MEMBER' },
-    { id: 'm9', guildId: 'g1', nickname: '불꽃', jobCategory: '마법사', job: '아크메이지(썬,콜)', level: 187, role: 'MEMBER' },
-    { id: 'm10', guildId: 'g1', nickname: '활짱', jobCategory: '궁수', job: '신궁', level: 193, role: 'MEMBER' },
-    { id: 'm11', guildId: 'g1', nickname: '그림자', jobCategory: '도적', job: '섀도어', level: 185, role: 'MEMBER' },
-    { id: 'm12', guildId: 'g1', nickname: '항해왕', jobCategory: '해적', job: '캡틴', level: 191, role: 'MANAGER' },
+    { id: 'm1', guildId: 'g1', nickname: '흑우', jobCategory: '전사', job: '히어로', level: 200, role: 'MASTER', isActive: true },
+    { id: 'm2', guildId: 'g1', nickname: '물풀', jobCategory: '마법사', job: '비숍', level: 195, role: 'MANAGER', isActive: true },
+    { id: 'm3', guildId: 'g1', nickname: '라플', jobCategory: '궁수', job: '보우마스터', level: 190, role: 'MEMBER', isActive: true },
+    { id: 'm4', guildId: 'g1', nickname: '도둑고양이', jobCategory: '도적', job: '나이트로드', level: 188, role: 'MEMBER', isActive: false },
+    { id: 'm5', guildId: 'g1', nickname: '배주부', jobCategory: '마법사', job: '아크메이지(불,독)', level: 192, role: 'MEMBER', isActive: true },
+    { id: 'm8', guildId: 'g1', nickname: '강철검', jobCategory: '전사', job: '팔라딘', level: 198, role: 'MEMBER', isActive: true },
+    { id: 'm9', guildId: 'g1', nickname: '불꽃', jobCategory: '마법사', job: '아크메이지(썬,콜)', level: 187, role: 'MEMBER', isActive: true },
+    { id: 'm10', guildId: 'g1', nickname: '활짱', jobCategory: '궁수', job: '신궁', level: 193, role: 'MEMBER', isActive: true },
+    { id: 'm11', guildId: 'g1', nickname: '그림자', jobCategory: '도적', job: '섀도어', level: 185, role: 'MEMBER', isActive: true },
+    { id: 'm12', guildId: 'g1', nickname: '항해왕', jobCategory: '해적', job: '캡틴', level: 191, role: 'MANAGER', isActive: true },
   ],
   g2: [
-    { id: 'm6', guildId: 'g2', nickname: '달빛', jobCategory: '전사', job: '팔라딘', level: 180, role: 'MASTER' },
-    { id: 'm7', guildId: 'g2', nickname: '은빛', jobCategory: '궁수', job: '신궁', level: 175, role: 'MEMBER' },
+    { id: 'm6', guildId: 'g2', nickname: '달빛', jobCategory: '전사', job: '팔라딘', level: 180, role: 'MASTER', isActive: true },
+    { id: 'm7', guildId: 'g2', nickname: '은빛', jobCategory: '궁수', job: '신궁', level: 175, role: 'MEMBER', isActive: true },
   ],
 };
 
 let seq = 100;
 const nextId = (prefix: string): string => `${prefix}_${(seq += 1)}`;
 
-/** 길드원 목록 */
-export function getMembers(guildId: string): Promise<Member[]> {
-  return delay([...(MEMBERS[guildId] ?? [])]);
+/**
+ * 길드원 목록 — 기본은 활동 중인 사람만.
+ *
+ * 공대 편성·레이드 참여자 선택이 이 함수를 그대로 쓰기 때문에, 기본값을 "활성만"으로
+ * 두면 비활성 길드원이 새 레이드에 딸려 들어가는 일이 화면 수정 없이 막힌다.
+ * 비활성까지 보려면(길드원 화면의 비활성 탭) includeInactive 를 켠다.
+ */
+export function getMembers(guildId: string, includeInactive = false): Promise<Member[]> {
+  const list = MEMBERS[guildId] ?? [];
+  return delay(includeInactive ? [...list] : list.filter((m) => m.isActive));
 }
 
 export interface AddMemberInput {
@@ -192,9 +210,19 @@ export function addMember(guildId: string, input: AddMemberInput): Promise<Membe
   const list = MEMBERS[guildId] ?? (MEMBERS[guildId] = []);
   const nickname = input.nickname.trim();
   if (!nickname) return Promise.reject(new Error('닉네임을 입력해 주세요.'));
-  if (list.some((m) => m.nickname === nickname)) {
-    return Promise.reject(new Error(`이미 등록된 닉네임입니다: ${nickname}`));
+
+  // 비활성까지 포함해 검사한다. 같은 닉네임을 새로 만들면 과거 이력이 두 사람으로 쪼개진다.
+  const existing = list.find((m) => m.nickname === nickname);
+  if (existing) {
+    return Promise.reject(
+      new Error(
+        existing.isActive
+          ? `이미 등록된 닉네임입니다: ${nickname}`
+          : `'${nickname}'은(는) 비활성 길드원입니다. 길드원 화면의 [비활성] 탭에서 되돌려 주세요.`,
+      ),
+    );
   }
+
   const member: Member = {
     id: nextId('m'),
     guildId,
@@ -203,14 +231,16 @@ export function addMember(guildId: string, input: AddMemberInput): Promise<Membe
     job: input.job,
     level: input.level,
     role: input.role,
+    isActive: true,
   };
   list.push(member);
   logAudit(guildId, '길드원 등록', `${nickname} (${ROLE_LABEL[input.role]})`);
   return delay(member, 200);
 }
 
+/** 활동 중인 마스터 수 — 비활성은 길드를 운영하지 못하므로 정족수에서 뺀다 */
 function masterCount(list: Member[]): number {
-  return list.filter((m) => m.role === 'MASTER').length;
+  return list.filter((m) => m.role === 'MASTER' && m.isActive).length;
 }
 
 /** 길드원 역할(권한) 변경 — 마지막 마스터는 강등 불가 */
@@ -230,18 +260,72 @@ export function updateMemberRole(guildId: string, memberId: string, role: Member
   return delay(updated, 150);
 }
 
-/** 길드원 삭제 — 마지막 마스터는 삭제 불가 */
-export function removeMember(guildId: string, memberId: string): Promise<void> {
+/**
+ * 비활성화 결과 — 어느 공대에서 빠졌는지, 공대장 재지정이 필요한 공대가 어디인지.
+ * 화면이 "1공대의 공대장을 다시 지정해 주세요" 같은 안내를 띄우는 데 쓴다.
+ */
+export interface DeactivateResult {
+  member: Member;
+  /** 이 길드원이 빠진 공대 이름들 */
+  removedFromParties: string[];
+  /** 공대장 자리가 비어 재지정이 필요한 공대 이름들 */
+  partiesNeedingLeader: string[];
+}
+
+/**
+ * 길드원 비활성화 (soft delete) — 삭제하지 않는다.
+ *
+ * 실제 삭제는 과거 레이드의 참여자 기록(raid_participants)과 참여도 집계를 끊어버린다.
+ * 비활성은 명단에서만 빼고 지난 기록은 그대로 둔다.
+ * 편성돼 있던 공대에서는 같이 빠진다 — 안 뽑을 사람이 명단에 남아 인원수를 부풀리면
+ * 공대 정원을 잘못 읽게 된다. 공대장이었다면 자리를 비우고 재지정을 요청한다.
+ */
+export function deactivateMember(guildId: string, memberId: string): Promise<DeactivateResult> {
   const list = MEMBERS[guildId] ?? [];
   const idx = list.findIndex((m) => m.id === memberId);
   const member = list[idx];
-  if (!member) return delay(undefined, 100);
+  if (!member) return Promise.reject(new Error('길드원을 찾을 수 없습니다.'));
+  if (!member.isActive) return Promise.reject(new Error('이미 비활성 상태입니다.'));
   if (member.role === 'MASTER' && masterCount(list) <= 1) {
-    return Promise.reject(new Error('마지막 관리자(마스터)는 삭제할 수 없습니다.'));
+    return Promise.reject(
+      new Error('마지막 관리자(마스터)는 비활성화할 수 없습니다. 다른 관리자를 먼저 임명하세요.'),
+    );
   }
-  list.splice(idx, 1);
-  logAudit(guildId, '길드원 삭제', member.nickname);
-  return delay(undefined, 120);
+
+  const updated: Member = { ...member, isActive: false };
+  list[idx] = updated;
+
+  const removedFromParties: string[] = [];
+  const partiesNeedingLeader: string[] = [];
+  const parties = PARTIES[guildId] ?? [];
+  parties.forEach((party, i) => {
+    if (!party.memberIds.includes(memberId) && party.leaderId !== memberId) return;
+    removedFromParties.push(party.name);
+    const wasLeader = party.leaderId === memberId;
+    if (wasLeader) partiesNeedingLeader.push(party.name);
+    parties[i] = {
+      ...party,
+      memberIds: party.memberIds.filter((id) => id !== memberId),
+      leaderId: wasLeader ? '' : party.leaderId,
+    };
+  });
+
+  logAudit(guildId, '길드원 비활성화', member.nickname);
+  return delay({ member: updated, removedFromParties, partiesNeedingLeader }, 200);
+}
+
+/** 비활성 길드원 복귀 — 공대 편성은 복원되지 않으니 다시 넣어야 한다 */
+export function reactivateMember(guildId: string, memberId: string): Promise<Member> {
+  const list = MEMBERS[guildId] ?? [];
+  const idx = list.findIndex((m) => m.id === memberId);
+  const member = list[idx];
+  if (!member) return Promise.reject(new Error('길드원을 찾을 수 없습니다.'));
+  if (member.isActive) return Promise.reject(new Error('이미 활동 중입니다.'));
+
+  const updated: Member = { ...member, isActive: true };
+  list[idx] = updated;
+  logAudit(guildId, '길드원 복귀', member.nickname);
+  return delay(updated, 200);
 }
 
 // ─── 보스 마스터 (SYS 공용, §9 시드) ──────────────────────
@@ -260,31 +344,59 @@ export const MAX_PHASE_COUNT = 20;
 export interface Boss {
   id: string;
   name: string;
+  /** 재입장 쿨타임(시간). 대시보드 보스 타이머의 다음 입장 가능 시각 계산에 쓰인다 */
+  cooldownHours: number;
 }
 
 const BOSSES: Boss[] = [
-  { id: 'b1', name: '자쿰' },
-  { id: 'b2', name: '혼테일' },
-  { id: 'b3', name: '핑크빈' },
-  { id: 'b4', name: '카오스 자쿰' },
-  { id: 'b5', name: '카오스 혼테일' },
-  { id: 'b6', name: '카오스 핑크빈' },
+  { id: 'b1', name: '자쿰', cooldownHours: DEFAULT_COOLDOWN_HOURS },
+  { id: 'b2', name: '혼테일', cooldownHours: DEFAULT_COOLDOWN_HOURS },
+  { id: 'b3', name: '핑크빈', cooldownHours: DEFAULT_COOLDOWN_HOURS },
+  { id: 'b4', name: '카오스 자쿰', cooldownHours: DEFAULT_COOLDOWN_HOURS },
+  { id: 'b5', name: '카오스 혼테일', cooldownHours: DEFAULT_COOLDOWN_HOURS },
+  { id: 'b6', name: '카오스 핑크빈', cooldownHours: DEFAULT_COOLDOWN_HOURS },
 ];
 
 export function getBosses(): Promise<Boss[]> {
   return delay([...BOSSES]);
 }
 
+/** 쿨타임 입력 상한 — 30일. 오타(24 를 240 으로)로 타이머가 사실상 안 열리는 걸 막는다 */
+export const MAX_COOLDOWN_HOURS = 720;
+
+/** 쿨타임 값 검증 — 통과하면 null, 아니면 사용자에게 보여줄 메시지 */
+function cooldownError(hours: number): string | null {
+  if (!Number.isInteger(hours) || hours < 1) return '쿨타임은 1시간 이상의 정수여야 합니다.';
+  if (hours > MAX_COOLDOWN_HOURS) return `쿨타임은 ${MAX_COOLDOWN_HOURS}시간(30일) 이하여야 합니다.`;
+  return null;
+}
+
 /** 보스 추가 (이름 중복 체크) */
-export function addBoss(name: string): Promise<Boss> {
+export function addBoss(name: string, cooldownHours = DEFAULT_COOLDOWN_HOURS): Promise<Boss> {
   const trimmed = name.trim();
   if (!trimmed) return Promise.reject(new Error('보스 이름을 입력해 주세요.'));
   if (BOSSES.some((b) => b.name === trimmed)) {
     return Promise.reject(new Error(`이미 등록된 보스입니다: ${trimmed}`));
   }
-  const boss: Boss = { id: nextId('b'), name: trimmed };
+  const invalid = cooldownError(cooldownHours);
+  if (invalid) return Promise.reject(new Error(invalid));
+
+  const boss: Boss = { id: nextId('b'), name: trimmed, cooldownHours };
   BOSSES.push(boss);
   return delay(boss, 150);
+}
+
+/** 보스 쿨타임 변경 — 주 1회 보스라면 168 처럼 값만 바꾸면 된다 */
+export function updateBossCooldown(id: string, cooldownHours: number): Promise<Boss> {
+  const idx = BOSSES.findIndex((b) => b.id === id);
+  const boss = BOSSES[idx];
+  if (!boss) return Promise.reject(new Error('보스를 찾을 수 없습니다.'));
+  const invalid = cooldownError(cooldownHours);
+  if (invalid) return Promise.reject(new Error(invalid));
+
+  const updated: Boss = { ...boss, cooldownHours };
+  BOSSES[idx] = updated;
+  return delay(updated, 150);
 }
 
 /** 보스 삭제 — 과거 레이드는 bossName 스냅샷이라 영향 없음 */
@@ -600,6 +712,121 @@ export function deleteParty(guildId: string, partyId: string): Promise<void> {
     if (idx >= 0) list.splice(idx, 1);
   }
   return delay(undefined, 150);
+}
+
+// ─── 보스 입장 기록 (쿨타임 타이머) ───────────────────────
+/**
+ * 공대가 보스에 "언제 들어갔는지"만 남기는 기록. 정산(raids)과는 별개다.
+ *
+ * 왜 raids 에 컬럼으로 안 붙였나: 입장했지만 정산을 안 하는 레이드(실패·꽝·파토)가
+ * 있는데, 입장 시각을 raids 행에 매달면 그런 건이 통째로 누락돼 타이머가 틀린 값을
+ * 보여준다. 두 기록은 생명주기가 다르므로 테이블을 분리한다.
+ *
+ * 쿨타임은 캐릭터 단위지만 공대가 같이 도는 운영을 전제로 (공대, 보스) 단위로 잡는다.
+ * 임시 공대(RaidRow.partyName = null)는 party_id 가 없어 타이머 대상이 아니다.
+ */
+export interface BossEntry {
+  id: string;
+  guildId: string;
+  partyId: string;
+  bossId: string;
+  /** 보스명 스냅샷 — 보스 마스터에서 삭제돼도 기록은 남는다 (raids.bossName 과 같은 정책) */
+  bossName: string;
+  /** ISO datetime (UTC). 표시할 때만 로컬로 바꾼다 */
+  enteredAt: string;
+}
+
+/**
+ * 덮어쓰지 않고 쌓는다(append-only). 취소가 "마지막 행 삭제"로 자연스럽게 풀리고,
+ * 나중에 입장 이력 화면을 붙일 때 데이터 구조를 바꿀 필요가 없다.
+ */
+const BOSS_ENTRIES: Record<string, BossEntry[]> = {};
+
+/** 지금으로부터 h시간 전 ISO — 목업 시드가 실제 시계를 따라가게 한다 */
+function hoursAgoISO(h: number): string {
+  return new Date(Date.now() - h * 60 * 60 * 1000).toISOString();
+}
+
+/**
+ * 시드 — 화면에서 "대기 중"과 "지금 가능"을 한 번에 볼 수 있게 두 상태를 섞는다.
+ * 고정 날짜를 쓰면 시간이 지날수록 전부 "가능"으로 수렴해 카운트다운을 확인할 수 없다.
+ */
+BOSS_ENTRIES.g1 = [
+  { id: 'be1', guildId: 'g1', partyId: 'p1', bossId: 'b1', bossName: '자쿰', enteredAt: hoursAgoISO(26) },
+  { id: 'be2', guildId: 'g1', partyId: 'p1', bossId: 'b4', bossName: '카오스 자쿰', enteredAt: hoursAgoISO(20.8) },
+  { id: 'be3', guildId: 'g1', partyId: 'p2', bossId: 'b2', bossName: '혼테일', enteredAt: hoursAgoISO(2) },
+];
+BOSS_ENTRIES.g2 = [
+  { id: 'be4', guildId: 'g2', partyId: 'p3', bossId: 'b1', bossName: '자쿰', enteredAt: hoursAgoISO(30) },
+];
+
+/** (공대, 보스) 조합마다 가장 최근 1건 — 타이머가 필요로 하는 건 최신 상태뿐이다 */
+export function getBossEntries(guildId: string): Promise<BossEntry[]> {
+  const latest = new Map<string, BossEntry>();
+  for (const entry of BOSS_ENTRIES[guildId] ?? []) {
+    const key = `${entry.partyId}:${entry.bossId}`;
+    const current = latest.get(key);
+    // ISO(UTC) 문자열은 사전순 비교 = 시각순 비교
+    if (!current || entry.enteredAt > current.enteredAt) latest.set(key, entry);
+  }
+  return delay([...latest.values()]);
+}
+
+/** 입장 기록 — "지금 입장" 버튼. 현재 시각으로 찍는다 */
+export function recordBossEntry(
+  guildId: string,
+  partyId: string,
+  bossId: string,
+): Promise<BossEntry> {
+  const boss = BOSSES.find((b) => b.id === bossId);
+  if (!boss) return Promise.reject(new Error('보스를 찾을 수 없습니다.'));
+  const party = (PARTIES[guildId] ?? []).find((p) => p.id === partyId);
+  if (!party) return Promise.reject(new Error('공대를 찾을 수 없습니다.'));
+
+  const entry: BossEntry = {
+    id: nextId('be'),
+    guildId,
+    partyId,
+    bossId,
+    bossName: boss.name,
+    enteredAt: new Date().toISOString(),
+  };
+  const list = BOSS_ENTRIES[guildId] ?? (BOSS_ENTRIES[guildId] = []);
+  list.push(entry);
+  logAudit(guildId, '보스 입장 기록', `${party.name} · ${boss.name}`);
+  return delay(entry, 150);
+}
+
+/** 입장 시각 보정 — 버튼을 늦게 눌렀을 때 실제 입장 시각으로 되돌린다 */
+export function updateBossEntry(
+  guildId: string,
+  entryId: string,
+  enteredAt: string,
+): Promise<BossEntry> {
+  const list = BOSS_ENTRIES[guildId] ?? [];
+  const idx = list.findIndex((e) => e.id === entryId);
+  const entry = list[idx];
+  if (!entry) return Promise.reject(new Error('입장 기록을 찾을 수 없습니다.'));
+
+  const ms = new Date(enteredAt).getTime();
+  if (Number.isNaN(ms)) return Promise.reject(new Error('시각 형식이 올바르지 않습니다.'));
+  if (ms > Date.now()) return Promise.reject(new Error('입장 시각은 미래일 수 없습니다.'));
+
+  const updated: BossEntry = { ...entry, enteredAt: new Date(ms).toISOString() };
+  list[idx] = updated;
+  logAudit(guildId, '입장 시각 수정', `${entry.bossName} → ${updated.enteredAt}`);
+  return delay(updated, 150);
+}
+
+/** 입장 기록 취소 — 원클릭이라 오터치가 나온다 */
+export function deleteBossEntry(guildId: string, entryId: string): Promise<void> {
+  const list = BOSS_ENTRIES[guildId] ?? [];
+  const idx = list.findIndex((e) => e.id === entryId);
+  if (idx >= 0) {
+    const [removed] = list.splice(idx, 1);
+    if (removed) logAudit(guildId, '입장 기록 취소', removed.bossName);
+  }
+  return delay(undefined, 120);
 }
 
 // ─── HTTP 에러 로그 (시스템 관리자) ───────────────────────

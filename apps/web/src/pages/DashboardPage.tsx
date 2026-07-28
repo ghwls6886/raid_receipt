@@ -12,6 +12,7 @@ import { StatTile } from '@/components/ui/StatTile';
 import { RaidTable } from '@/components/raids/RaidTable';
 import { LineChart } from '@/components/charts/LineChart';
 import { LoadingState } from '@/components/feedback/LoadingState';
+import { BossTimerCard } from '@/components/dashboard/BossTimerCard';
 import { cn } from '@/lib/cn';
 
 const RANK_TONE = [
@@ -98,6 +99,9 @@ export function DashboardPage() {
           />
         </div>
       )}
+
+      {/* 보스 입장 쿨타임 — 정산 전에 "지금 들어갔다"를 남기는 자리 */}
+      <BossTimerCard />
 
       {/* 벤토: 차트 + 참여도 + 보스별 평균 */}
       <div className="mb-4 grid gap-4 lg:grid-cols-3">

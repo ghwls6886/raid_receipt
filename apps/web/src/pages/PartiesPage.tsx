@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Swords, Plus, Pencil, Trash2, Crown, Check } from 'lucide-react';
+import { Swords, Plus, Pencil, Trash2, Crown, Check, AlertTriangle } from 'lucide-react';
 import { toast } from '@/stores/useToastStore';
 import { confirm } from '@/stores/useConfirmStore';
 import { useCurrentGuild } from '@/stores/useGuildStore';
@@ -148,6 +148,10 @@ interface PartyCardProps {
 
 function PartyCard({ party, memberById, onEdit, onDelete }: PartyCardProps) {
   const leader = memberById.get(party.leaderId);
+  // 공대장을 비활성화하면 leaderId 가 비워진다. 조용히 '—' 로 두면 재지정이 필요한 줄
+  // 모르고 넘어가, 잔돈 정책이 '공대장 몫'인 공대에서 다음 정산이 어긋난다.
+  const needsLeader = !leader;
+
   return (
     <Card className="p-5">
       <div className="flex items-start justify-between gap-2">
@@ -177,6 +181,17 @@ function PartyCard({ party, memberById, onEdit, onDelete }: PartyCardProps) {
           </button>
         </div>
       </div>
+
+      {needsLeader && (
+        <button
+          className="border-warning-500/30 bg-warning-500/10 text-warning-700 mt-3 flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs font-medium"
+          onClick={onEdit}
+          type="button"
+        >
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          공대장이 비어 있습니다. 눌러서 다시 지정해 주세요.
+        </button>
+      )}
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         {party.memberIds.map((id) => {

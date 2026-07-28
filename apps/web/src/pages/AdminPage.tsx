@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, Swords, Server, AlertTriangle, type LucideIcon } from 'lucide-react';
 import { toast } from '@/stores/useToastStore';
@@ -7,6 +7,8 @@ import {
   getBosses,
   addBoss,
   deleteBoss,
+  updateBossCooldown,
+  MAX_COOLDOWN_HOURS,
   getServers,
   addServer,
   deleteServer,
@@ -14,6 +16,7 @@ import {
   type Boss,
   type GameServer,
 } from '@/lib/api';
+import { DEFAULT_COOLDOWN_HOURS } from '@/lib/bossTimer';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -171,17 +174,161 @@ function MasterPanel<T extends NamedItem>({
   );
 }
 
+/**
+ * 보스 마스터 — 이름 + 재입장 쿨타임.
+ *
+ * 이름만 다루는 MasterPanel 을 쓰지 않고 따로 둔다. 보스는 쿨타임이라는 두 번째 필드가
+ * 있어서 `add: (name) => Promise<T>` 시그니처에 담기지 않는다.
+ */
 function BossPanel() {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState('');
+  const [cooldown, setCooldown] = useState(String(DEFAULT_COOLDOWN_HOURS));
+
+  const { data: bosses, isLoading } = useQuery({ queryKey: ['bosses'], queryFn: getBosses });
+  const refetch = () => void queryClient.invalidateQueries({ queryKey: ['bosses'] });
+
+  const addMutation = useMutation({
+    mutationFn: () => addBoss(name, Number(cooldown)),
+    onSuccess: () => {
+      toast.success('보스가 추가되었습니다.');
+      setName('');
+      setCooldown(String(DEFAULT_COOLDOWN_HOURS));
+      refetch();
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : '추가에 실패했습니다.'),
+  });
+
+  const cooldownMutation = useMutation({
+    mutationFn: (v: { id: string; hours: number }) => updateBossCooldown(v.id, v.hours),
+    onSuccess: (boss) => {
+      toast.success(`${boss.name} 쿨타임을 ${boss.cooldownHours}시간으로 변경했습니다.`);
+      refetch();
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : '변경에 실패했습니다.'),
+  });
+
+  const del = async (boss: Boss) => {
+    const ok = await confirm.danger(`'${boss.name}'을(를) 삭제할까요?`, '보스 삭제');
+    if (!ok) return;
+    await deleteBoss(boss.id);
+    toast.success('삭제되었습니다.');
+    refetch();
+  };
+
   return (
-    <MasterPanel<Boss>
-      queryKey="bosses"
-      fetchAll={getBosses}
-      add={addBoss}
-      remove={deleteBoss}
-      placeholder="보스 이름 추가 (예: 카오스 벨룸)"
-      label="보스"
-      hint="보스를 삭제해도 과거 레이드 기록에는 영향이 없습니다(이름 스냅샷)."
-    />
+    <Card className="max-w-xl p-5">
+      <div className="mb-3 flex items-center gap-2">
+        <Input
+          className="flex-1"
+          placeholder="보스 이름 추가 (예: 카오스 벨룸)"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && name.trim()) addMutation.mutate();
+          }}
+        />
+        <Input
+          aria-label="쿨타임(시간)"
+          className="w-24 shrink-0"
+          max={MAX_COOLDOWN_HOURS}
+          min={1}
+          onChange={(e) => setCooldown(e.target.value)}
+          type="number"
+          value={cooldown}
+        />
+        <Button
+          className="shrink-0"
+          onClick={() => addMutation.mutate()}
+          disabled={!name.trim() || addMutation.isPending}
+        >
+          <Plus className="h-4 w-4" /> 추가
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="py-8">
+          <LoadingState message="불러오는 중..." />
+        </div>
+      ) : bosses && bosses.length > 0 ? (
+        <ul className="divide-border-subtle divide-y">
+          {bosses.map((boss) => (
+            <li key={boss.id} className="flex items-center justify-between gap-2 py-2.5">
+              <span className="text-text-primary min-w-0 flex-1 truncate text-sm font-medium">
+                {boss.name}
+              </span>
+              <CooldownField
+                boss={boss}
+                disabled={cooldownMutation.isPending}
+                onCommit={(hours) => cooldownMutation.mutateAsync({ id: boss.id, hours })}
+              />
+              <button
+                aria-label="삭제"
+                className="text-text-muted hover:text-error-600 shrink-0 rounded-md p-1.5"
+                onClick={() => void del(boss)}
+                type="button"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-text-muted py-8 text-center text-sm">등록된 항목이 없습니다.</p>
+      )}
+
+      <p className="text-text-tertiary mt-3 text-xs">
+        보스를 삭제해도 과거 레이드 기록에는 영향이 없습니다(이름 스냅샷). 쿨타임은 대시보드
+        보스 타이머의 다음 입장 가능 시각 계산에 쓰입니다 — 주 1회 보스라면 168 을 넣으세요.
+      </p>
+    </Card>
+  );
+}
+
+interface CooldownFieldProps {
+  boss: Boss;
+  disabled: boolean;
+  /** 저장 — 거부되면 reject 한다 */
+  onCommit: (hours: number) => Promise<unknown>;
+}
+
+/** 쿨타임 인라인 편집 — 값이 실제로 바뀐 경우에만 저장한다 */
+function CooldownField({ boss, disabled, onCommit }: CooldownFieldProps) {
+  const [value, setValue] = useState(String(boss.cooldownHours));
+
+  // 저장이 성공해 서버 값이 바뀌면 입력칸도 따라간다
+  useEffect(() => setValue(String(boss.cooldownHours)), [boss.cooldownHours]);
+
+  const commit = async () => {
+    const hours = Number(value);
+    if (hours === boss.cooldownHours) return;
+    try {
+      await onCommit(hours);
+    } catch {
+      // 거부된 값(범위 밖 등)이 입력칸에 남으면 저장된 것처럼 보인다. 서버 값으로 되돌린다.
+      // 값이 그대로라 위 useEffect 는 재실행되지 않으므로 여기서 직접 복구해야 한다.
+      setValue(String(boss.cooldownHours));
+    }
+  };
+
+  return (
+    <span className="text-text-tertiary flex shrink-0 items-center gap-1 text-xs">
+      <Input
+        aria-label={`${boss.name} 쿨타임(시간)`}
+        className="w-20 px-2 py-1 text-right text-xs"
+        disabled={disabled}
+        max={MAX_COOLDOWN_HOURS}
+        min={1}
+        onBlur={() => void commit()}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+        }}
+        type="number"
+        value={value}
+      />
+      시간
+    </span>
   );
 }
 

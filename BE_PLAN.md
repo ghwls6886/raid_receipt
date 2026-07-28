@@ -22,7 +22,8 @@ FE 데이터 레이어 `apps/web/src/lib/api.ts` 가 **API 계약의 사실상 �
 ```
 apps/web/            React FE (Vercel)
 supabase/
-  migrations/        테이블 + RLS + RPC 함수  → 0001_init.sql
+  migrations/        테이블 + RLS + RPC 함수  → 0001_init.sql, 0002_boss_timer.sql,
+                                              0003_member_active.sql
   functions/         Edge Functions           → discord-send/
   seed.sql           SYS 마스터 시드(보스 6·서버 2)
   config.toml
@@ -57,12 +58,15 @@ packages/shared/     공용 타입 골격 (대부분 supabase gen types 로 대�
 | FE 함수 (`lib/api.ts`) | 방식 |
 |---|---|
 | getMembers / addMember / get·create·update·deleteParty | **1층** `supabase.from('members'/'parties')` |
+| deactivateMember / reactivateMember | **2층** RPC 권장 (0003) — members.is_active + party_members 정리 + leader_id 비우기를 한 트랜잭션으로 |
 | getBosses / getServers / getPenaltyTypes / getGuildSettings | **1층** select |
 | addBoss/deleteBoss, addServer/deleteServer | **1층** (RLS: 시스템 관리자/service_role) |
 | getAccounts / updateAccountRole / removeAccount | **1층** (마지막 OWNER 보호는 트리거 or RPC) |
 | createInvite / redeemInvite | **1층** insert / **2층** RPC(계정 생성 동반) |
 | getRaids / getRaid / getRaidDetail | **1층** select(+조인) |
 | saveRaid (신규/수정) | **1층** upsert (raids + 자식 테이블) |
+| getBossEntries / recordBossEntry / updateBossEntry / deleteBossEntry | **1층** `supabase.from('boss_entries')` (0002) |
+| updateBossCooldown | **1층** `bosses.cooldown_hours` update (RLS: 시스템 관리자/service_role) |
 | **확정** | **2층** `supabase.rpc('confirm_settlement', {p_raid_id})` → **3층** discord-send |
 | getDashboardStats / getBossAverages / getMemberStats | **1층** view/RPC 집계 |
 | getAuditLogs | **1층** select (audit_logs) |
@@ -88,7 +92,7 @@ packages/shared/     공용 타입 골격 (대부분 supabase gen types 로 대�
 
 ## 7. 착수 순서
 
-1. `supabase init` → `link` → `db push`(0001_init) → seed.
+1. `supabase init` → `link` → `db push`(0001_init, 0002_boss_timer, 0003_member_active) → seed.
 2. 구글 Auth + `guild_accounts` 온보딩/초대 redeem.
 3. 1층 CRUD 를 FE `api.ts` 함수 속에서 supabase-js 로 교체(화면 무수정).
 4. `saveRaid` upsert + `confirm_settlement` RPC + `settlement.ts` 사용.
@@ -99,5 +103,8 @@ packages/shared/     공용 타입 골격 (대부분 supabase gen types 로 대�
 ## 8. 참고
 
 - 스키마·RLS·RPC 초안: `supabase/migrations/0001_init.sql`.
+- 보스 입장 기록·쿨타임: `supabase/migrations/0002_boss_timer.sql` (계산 규칙은 FE `lib/bossTimer.ts`).
+- 길드원 비활성화(soft delete): `supabase/migrations/0003_member_active.sql`.
+  길드원 DELETE 는 금지 — `raid_participants.member_id` 가 끊겨 과거 정산의 참여자가 사라진다.
 - Edge Function 예시: `supabase/functions/discord-send/index.ts`.
 - 명세서 원본 §번호·초기 SQL 초안(`claude/schema.sql`)도 참조.
