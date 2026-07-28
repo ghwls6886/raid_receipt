@@ -256,6 +256,7 @@ function PartyModal({ guildId, members, party, onClose, onSaved }: PartyModalPro
       onClose={onClose}
       title={party ? '공대 수정' : '공대 만들기'}
       width="min(760px, 94vw)"
+      bodyClassName="flex flex-col"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -267,8 +268,10 @@ function PartyModal({ guildId, members, party, onClose, onSaved }: PartyModalPro
         </>
       }
     >
-      <div className="space-y-4">
-        <div>
+      {/* min-h-0 이 있어야 이 래퍼가 모달 body 높이에 맞춰 줄어들고, 그래야 아래 리스트도 줄어든다.
+          리스트가 최소높이 바닥에 닿는 극단적으로 낮은 화면에서는 이 래퍼가 스크롤을 받아준다. */}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
+        <div className="shrink-0">
           <label className="text-text-secondary mb-1 block text-sm font-medium">공대명</label>
           <Input
             placeholder="예: 1공대 (자쿰)"
@@ -278,7 +281,7 @@ function PartyModal({ guildId, members, party, onClose, onSaved }: PartyModalPro
           />
         </div>
 
-        <div>
+        <div className="shrink-0">
           <label className="text-text-secondary mb-1 block text-sm font-medium">공대장</label>
           <Select value={leaderId} onChange={(e) => changeLeader(e.target.value)}>
             {members.map((m) => (
@@ -289,7 +292,7 @@ function PartyModal({ guildId, members, party, onClose, onSaved }: PartyModalPro
           </Select>
         </div>
 
-        <div>
+        <div className="shrink-0">
           <label className="text-text-secondary mb-1 block text-sm font-medium">잔돈 처리</label>
           <Select
             value={remainderPolicy}
@@ -303,11 +306,13 @@ function PartyModal({ guildId, members, party, onClose, onSaved }: PartyModalPro
           </Select>
         </div>
 
-        <div>
-          <label className="text-text-secondary mb-1 block text-sm font-medium">
+        {/* 남는 높이를 리스트가 전부 차지하고 그 안에서만 스크롤한다.
+            고정 높이를 주면 작은 화면에서 모달 밖으로 잘려 스크롤바에 닿을 수 없다. */}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <label className="text-text-secondary mb-1 block shrink-0 text-sm font-medium">
             공대원 ({memberIds.size}명)
           </label>
-          <div className="border-border-subtle max-h-80 space-y-4 overflow-auto rounded-md border p-3">
+          <div className="border-border-subtle min-h-20 flex-1 space-y-4 overflow-auto rounded-md border p-3">
             {groupMembersByJob(members).map((sec) => (
               <div key={sec.category}>
                 <div className="mb-2 flex items-center gap-2">

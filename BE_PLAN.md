@@ -37,7 +37,8 @@ packages/shared/     공용 타입 골격 (대부분 supabase gen types 로 대�
    (`functions/discord-send`). PNG 는 나중에 외부 렌더 API(htmlcsstoimage 등)로.
 2. **Prisma 안 씀 — SQL 마이그레이션으로 통일.**
    RLS·DB함수가 SQL 이라 `supabase/migrations/*.sql` 로 일원화. FE 타입은
-   `supabase gen types typescript --linked > apps/web/src/lib/supabase-types.ts`.
+   `pnpm db:types`(로컬) → `apps/web/src/lib/database.types.ts`. 클라우드 기준으로 뽑으려면
+   `pnpm exec supabase gen types typescript --linked > apps/web/src/lib/database.types.ts`.
 3. **정산 계산 위치.** MVP 는 FE `settlement.ts`(§3)에서 계산 → RPC 는 저장·검증만.
    무결성 강화가 필요하면 계산을 DB함수(plpgsql)로 이관.
 4. **크레딧 원자성은 지금 불필요.** 현재 **무료 베타**라 확정 시 크레딧 차감 없음 →

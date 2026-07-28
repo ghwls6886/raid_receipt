@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   ScrollText,
   Swords,
-  Coins,
   Users,
   Settings,
   Moon,
@@ -26,7 +25,8 @@ const NAV_ITEMS = [
   { to: '/raids', label: '레이드', Icon: ScrollText, end: false },
   { to: '/parties', label: '공대 구성', Icon: Swords, end: false },
   { to: '/members', label: '길드원', Icon: Users, end: false },
-  { to: '/credits', label: '크레딧', Icon: Coins, end: false },
+  // 크레딧 — 과금 정책 미정이라 비활성화. 정책 확정 후 이 줄과 CreditPill 링크를 함께 복원한다.
+  // { to: '/credits', label: '크레딧', Icon: Coins, end: false },
   { to: '/settings', label: '길드 설정', Icon: Settings, end: false },
 ] as const;
 
@@ -166,17 +166,15 @@ function GuildSwitcher() {
   );
 }
 
-/** 무료 베타 pill — 클릭 시 크레딧(무료 안내) 화면으로. 정식 출시 때 크레딧 잔량으로 복원 */
+/**
+ * 무료 베타 pill — 표시 전용 배지.
+ * 크레딧 정책이 미정이라 /credits 로 가는 링크를 뗐다. 정책 확정 후 button + navigate 로 복원한다.
+ */
 function CreditPill() {
-  const navigate = useNavigate();
   return (
-    <button
-      className="border-border-subtle hover:bg-bg-hover text-brand-600 mr-1 rounded-full border px-3 py-1.5 text-xs font-semibold"
-      onClick={() => navigate('/credits')}
-      type="button"
-    >
+    <span className="border-border-subtle text-brand-600 mr-1 rounded-full border px-3 py-1.5 text-xs font-semibold">
       무료 베타
-    </button>
+    </span>
   );
 }
 

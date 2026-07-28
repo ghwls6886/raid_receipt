@@ -27,6 +27,10 @@ coverage/
 .env.*.local
 *.local
 
+# Supabase CLI 로컬 산출물 (.temp/start-secrets 에 실 시크릿이 들어간다)
+supabase/.temp/
+supabase/.branches/
+
 # OS
 .DS_Store
 

@@ -16,11 +16,11 @@ export interface Guild {
   credits: number;
 }
 
-const PRIMARY_GUILD: Guild = { id: 'g1', serverName: '메이플랜드', guildName: '흑우연맹', credits: 87 };
+const PRIMARY_GUILD: Guild = { id: 'g1', serverName: '메이플랜드', guildName: '공격', credits: 87 };
 
 const MOCK_GUILDS: Guild[] = [
   PRIMARY_GUILD,
-  { id: 'g2', serverName: '메이플플래닛', guildName: '달빛기사단', credits: 12 },
+  { id: 'g2', serverName: '메이플플래닛', guildName: '사냥안함', credits: 12 },
 ];
 
 let guildSeq = MOCK_GUILDS.length;

@@ -60,7 +60,9 @@ export function Modal({
   closeOnEsc = true,
   showHeader = true,
   showCloseButton = true,
-  scroll = 'none',
+  // 기본을 'body'로 둔다. maxHeight(80vh)에 눌려 body가 압축될 때
+  // 'none'이면 내용이 스크롤 없이 잘려서 작은 화면에서 접근 자체가 막힌다.
+  scroll = 'body',
   resizable = false,
   draggable = false,
   initialOffset,
