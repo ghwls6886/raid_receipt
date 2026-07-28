@@ -1,5 +1,104 @@
-# Supabase 로컬 설정 (참고용 최소본). `supabase init` 로 전체 생성 권장.
+# Supabase 로컬 설정. CLI 2.110.0 기본값 기준으로 이 프로젝트에 필요한 것만 남긴 것.
+# 여기 없는 키는 CLI 기본값이 적용된다. 전체 레퍼런스:
+# https://supabase.com/docs/guides/local-development/cli/config
+#
+# 셋업 절차는 ./SETUP.md, 진행 상태는 ../BE_PROGRESS.md.
+# ⚠️ 이 파일은 커밋된다. 시크릿은 반드시 env(...) 참조로만 쓸 것.
+
 project_id = "raid-receipt"
 
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+# 뷰/테이블/함수가 한 번에 반환하는 최대 행 수. 사고성 대량 조회 방어.
+max_rows = 1000
+# auto_expose_new_tables 는 의도적으로 설정하지 않는다(= 자동 노출 안 함, 현재 클라우드 기본값).
+# 대신 마이그레이션에서 anon/authenticated 에 명시적으로 GRANT 한다.
+# 이 키는 2026-10-30 에 제거 예정이라 켜두면 그때 깨진다. → BE_PROGRESS.md P1-7
+
+[db]
+port = 54322
+# db diff 가 쓰는 shadow DB 포트.
+shadow_port = 54320
+# 클라우드 프로젝트와 같아야 한다. 다르면 P8 에서 db push 가 깨진다.
+major_version = 17
+
+[db.migrations]
+enabled = true
+
+[db.seed]
+enabled = true
+# db reset 시 자동 실행. 단 클라우드 db push 에는 포함되지 않는다(P8-2 에서 수동 실행).
+sql_paths = ["./seed.sql"]
+
+[realtime]
+enabled = true
+
+[studio]
+enabled = true
+port = 54323
+api_url = "http://127.0.0.1"
+
+# 로컬 메일 캐처. 실제로 발송되지 않고 웹 UI 에서 열어본다.
+# P2(이메일 로그인으로 RLS 검증)에서 확인 메일·매직링크를 여기서 받는다.
+[local_smtp]
+enabled = true
+port = 54324
+
+# 이 프로젝트는 파일 업로드가 없다(영수증은 디스코드 embed — BE_PLAN.md §2-1).
+# 컨테이너 2개(storage-api, imgproxy)를 안 띄워 기동이 빨라진다. 필요해지면 true 로.
+[storage]
+enabled = false
+
+# 로그 분석(vector + logflare). 로컬 개발에 불필요하고 가장 무겁다.
+[analytics]
+enabled = false
+
+[auth]
+enabled = true
+# Vite dev 서버 주소. 배포 후에는 실도메인으로 교체(P8-5).
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["http://localhost:5173/auth/callback"]
+# access token(JWT) 수명(초). 기본 3600, 최대 604800.
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+# 0 이면 다중 탭/재시도 시 refresh 가 충돌해 강제 로그아웃이 발생한다. 반드시 0 보다 크게.
+refresh_token_reuse_interval = 10
+enable_signup = true
+enable_anonymous_sign_ins = false
+minimum_password_length = 6
+
+[auth.email]
+enable_signup = true
+# 로컬에서는 확인 메일 없이 즉시 가입시킨다. P2 시나리오를 빠르게 돌리기 위함.
+# 클라우드에서는 대시보드에서 켤 것.
+enable_confirmations = false
+double_confirm_changes = true
+
+[auth.sms]
+enable_signup = false
+enable_confirmations = false
+
+# ── 구글 OAuth ───────────────────────────────────────────────────────────────
+# P3-4 에서 레포 "루트"에 .env 를 만든 뒤(GOOGLE_CLIENT_ID / GOOGLE_SECRET)
+# 아래 주석을 해제하고 `pnpm db:stop && pnpm db:start` 로 재기동한다.
+# 지금 켜두면 env 가 없어 start 가 실패하므로 P3 전까지는 주석 유지.
+#
+# [auth.external.google]
+# enabled = true
+# client_id = "env(GOOGLE_CLIENT_ID)"
+# secret = "env(GOOGLE_SECRET)"
+# # 로컬 구글 로그인에는 nonce 검사 우회가 필요하다.
+# skip_nonce_check = true
+
+[edge_runtime]
+enabled = true
+# per_worker = 핫 리로드. 문제가 생기면 oneshot 으로.
+policy = "per_worker"
+deno_version = 2
+
+# 웹훅 URL 을 다루므로 JWT 검증 필수. 익명 호출을 허용하면 안 된다.
 [functions.discord-send]
 verify_jwt = true

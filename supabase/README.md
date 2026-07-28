@@ -15,6 +15,10 @@ supabase/
 CLI 는 루트 devDependency 라 별도 설치가 필요 없다 (`pnpm install` 이면 끝).
 로컬 스택을 쓰려면 Docker 가 떠 있어야 한다.
 
+> **처음 셋업이라면 [SETUP.md](./SETUP.md) 부터.** 진행 순서(로컬 → 구글 OAuth → 클라우드),
+> 계정 선택 주의사항, 구글 OAuth 등록 절차, `config.toml` 인증 설정을 다룬다.
+> 아래는 그 이후 반복해서 쓰는 명령이다.
+
 ### A. 로컬 (Docker) — 개발용
 
 ```bash

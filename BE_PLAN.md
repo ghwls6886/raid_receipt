@@ -92,6 +92,9 @@ packages/shared/     공용 타입 골격 (대부분 supabase gen types 로 대�
 
 ## 7. 착수 순서
 
+> **진행 상태(체크박스)는 [BE_PROGRESS.md](BE_PROGRESS.md) 에서 관리한다.** 아래는 큰 줄기만.
+
+0. **셋업 → [supabase/SETUP.md](supabase/SETUP.md)** (로컬 먼저, 클라우드는 마지막. 계정 선택 주의).
 1. `supabase init` → `link` → `db push`(0001_init, 0002_boss_timer, 0003_member_active) → seed.
 2. 구글 Auth + `guild_accounts` 온보딩/초대 redeem.
 3. 1층 CRUD 를 FE `api.ts` 함수 속에서 supabase-js 로 교체(화면 무수정).
