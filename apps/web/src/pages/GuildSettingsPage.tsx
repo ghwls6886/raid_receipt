@@ -13,10 +13,11 @@ import {
   getAccounts,
   updateAccountRole,
   removeAccount,
+  getAuditLogs,
+  logAudit,
   ACCOUNT_ROLE_LABEL,
   type AccountRole,
   type GuildAccount,
-  type MemberRole,
   type PenaltyCalcType,
   type PenaltyType,
 } from '@/lib/api';
@@ -74,7 +75,7 @@ export function GuildSettingsPage() {
         <AccountRoleCard />
         <PenaltyPolicyCard />
         <InviteCard />
-        {/* [BE TODO] 변경 이력(audit): 서버 audit_logs 조회로 구현 후 <AuditLogCard /> 복원 */}
+        <AuditLogCard />
       </div>
     </div>
   );
@@ -92,7 +93,7 @@ function BasicInfoCard() {
   const changeServer = (name: string) => {
     if (name === guild.serverName) return;
     setGuildServer(guild.id, name);
-    // [BE TODO] 서버명 변경도 audit_logs 에 기록
+    void logAudit(guild.id, '서버 변경', `${guild.serverName} → ${name}`);
     toast.success('서버명이 변경되었습니다.');
   };
 
@@ -281,8 +282,8 @@ function AccountRoleCard() {
   );
 }
 
-const INVITE_ROLES: { value: MemberRole; label: string }[] = [
-  { value: 'MANAGER', label: '부마스터' },
+const INVITE_ROLES: { value: AccountRole; label: string }[] = [
+  { value: 'ADMIN', label: '부마스터' },
   { value: 'MEMBER', label: '길드원' },
 ];
 
@@ -290,7 +291,7 @@ const INVITE_ROLES: { value: MemberRole; label: string }[] = [
 function InviteCard() {
   const guild = useCurrentGuild();
   const queryClient = useQueryClient();
-  const [role, setRole] = useState<MemberRole>('MANAGER');
+  const [role, setRole] = useState<AccountRole>('ADMIN');
   const [code, setCode] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -324,7 +325,7 @@ function InviteCard() {
           <Select
             className="w-32"
             value={role}
-            onChange={(e) => setRole(e.target.value as MemberRole)}
+            onChange={(e) => setRole(e.target.value as AccountRole)}
           >
             {INVITE_ROLES.map((r) => (
               <option key={r.value} value={r.value}>
@@ -460,9 +461,6 @@ function PenaltyPolicyCard() {
   );
 }
 
-/* [BE TODO] 변경 이력 카드 — 서버 audit_logs 조회(getAuditLogs)로 구현 후 복원.
-   정산·패널티·권한·서버 변경 등을 시각·동작·상세로 최신순 표시.
-
 function AuditLogCard() {
   const guild = useCurrentGuild();
   const { data, isLoading } = useQuery({
@@ -501,4 +499,3 @@ function AuditLogCard() {
     </Card>
   );
 }
-*/

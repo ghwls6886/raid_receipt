@@ -34,6 +34,21 @@ export type Database = {
   }
   public: {
     Tables: {
+      admins: {
+        Row: {
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
@@ -69,16 +84,71 @@ export type Database = {
           },
         ]
       }
+      boss_entries: {
+        Row: {
+          boss_id: string | null
+          boss_name: string
+          created_at: string
+          entered_at: string
+          guild_id: string
+          id: string
+          party_id: string
+        }
+        Insert: {
+          boss_id?: string | null
+          boss_name: string
+          created_at?: string
+          entered_at?: string
+          guild_id: string
+          id?: string
+          party_id: string
+        }
+        Update: {
+          boss_id?: string | null
+          boss_name?: string
+          created_at?: string
+          entered_at?: string
+          guild_id?: string
+          id?: string
+          party_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "boss_entries_boss_id_fkey"
+            columns: ["boss_id"]
+            isOneToOne: false
+            referencedRelation: "bosses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boss_entries_guild_id_fkey"
+            columns: ["guild_id"]
+            isOneToOne: false
+            referencedRelation: "guilds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "boss_entries_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bosses: {
         Row: {
+          cooldown_hours: number
           id: string
           name: string
         }
         Insert: {
+          cooldown_hours?: number
           id?: string
           name: string
         }
         Update: {
+          cooldown_hours?: number
           id?: string
           name?: string
         }
@@ -313,6 +383,7 @@ export type Database = {
           created_at: string
           guild_id: string
           id: string
+          is_active: boolean
           job: string
           job_category: string
           level: number
@@ -323,6 +394,7 @@ export type Database = {
           created_at?: string
           guild_id: string
           id?: string
+          is_active?: boolean
           job: string
           job_category: string
           level: number
@@ -333,6 +405,7 @@ export type Database = {
           created_at?: string
           guild_id?: string
           id?: string
+          is_active?: boolean
           job?: string
           job_category?: string
           level?: number
@@ -735,6 +808,126 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "raids"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_guild: {
+        Args: {
+          p_display_name?: string
+          p_guild_name: string
+          p_server_name: string
+        }
+        Returns: {
+          created_at: string
+          credits: number
+          guild_name: string
+          id: string
+          server_name: string
+          webhook_url: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "guilds"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_invite: {
+        Args: {
+          p_code: string
+          p_guild_id: string
+          p_role: Database["public"]["Enums"]["account_role"]
+        }
+        Returns: {
+          code: string
+          created_at: string
+          expires_at: string | null
+          guild_id: string
+          role: Database["public"]["Enums"]["account_role"]
+          used_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "invites"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      delete_raid: { Args: { p_raid_id: string }; Returns: undefined }
+      get_webhook_url: { Args: { p_guild_id: string }; Returns: string }
+      is_admin: { Args: never; Returns: boolean }
+      redeem_invite: {
+        Args: { p_code: string; p_display_name?: string }
+        Returns: {
+          created_at: string
+          email: string
+          guild_id: string
+          id: string
+          name: string
+          role: Database["public"]["Enums"]["account_role"]
+          user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "guild_accounts"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      remove_account: { Args: { p_account_id: string }; Returns: undefined }
+      save_raid: {
+        Args: { p_input: Json }
+        Returns: {
+          boss_name: string
+          created_at: string
+          date: string
+          expense_total: number
+          fee_total: number
+          guild_id: string
+          id: string
+          leader_ppoji: number
+          leftover: number
+          net_profit: number
+          participant_count: number
+          party_name: string | null
+          per_person: number
+          phase_count: number
+          ppoji_pct: number
+          remainder_policy: Database["public"]["Enums"]["remainder_policy"]
+          sent: boolean
+          status: Database["public"]["Enums"]["raid_status"]
+          total_sales: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "raids"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_webhook_url: {
+        Args: { p_guild_id: string; p_url: string }
+        Returns: undefined
+      }
+      update_account_role: {
+        Args: {
+          p_account_id: string
+          p_role: Database["public"]["Enums"]["account_role"]
+        }
+        Returns: {
+          created_at: string
+          email: string
+          guild_id: string
+          id: string
+          name: string
+          role: Database["public"]["Enums"]["account_role"]
+          user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "guild_accounts"
           isOneToOne: true
           isSetofReturn: false
         }

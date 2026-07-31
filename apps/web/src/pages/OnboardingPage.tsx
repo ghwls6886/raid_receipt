@@ -1,26 +1,33 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Ticket } from 'lucide-react';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useGuildStore } from '@/stores/useGuildStore';
-import { redeemInvite } from '@/lib/api';
+import { supabase } from '@/lib/supabase';
 import { toast } from '@/stores/useToastStore';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 
-/** 온보딩 (목업) — 길드 선택/생성 or 초대 코드로 참여 → 대시보드 */
 export function OnboardingPage() {
   const navigate = useNavigate();
   const guilds = useGuildStore((s) => s.guilds);
+  const loadGuilds = useGuildStore((s) => s.loadGuilds);
   const setCurrentGuild = useGuildStore((s) => s.setCurrentGuild);
   const addGuild = useGuildStore((s) => s.addGuild);
   const completeOnboarding = useAuthStore((s) => s.completeOnboarding);
 
-  const [creating, setCreating] = useState(guilds.length === 0);
+  const [creating, setCreating] = useState(false);
   const [serverName, setServerName] = useState('');
   const [guildName, setGuildName] = useState('');
   const [inviteCode, setInviteCode] = useState('');
-  const [redeeming, setRedeeming] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void loadGuilds().then(() => {
+      const { guilds: loaded } = useGuildStore.getState();
+      if (loaded.length === 0) setCreating(true);
+    });
+  }, [loadGuilds]);
 
   const enter = () => {
     completeOnboarding();
@@ -32,14 +39,21 @@ export function OnboardingPage() {
     enter();
   };
 
-  const create = () => {
+  const create = async () => {
     if (!serverName.trim() || !guildName.trim()) {
       toast.warning('서버명과 길드명을 입력해 주세요.');
       return;
     }
-    addGuild(serverName, guildName);
-    toast.success('길드가 생성되었습니다. 신규 10크레딧이 지급되었습니다.');
-    enter();
+    setBusy(true);
+    try {
+      await addGuild(serverName, guildName);
+      toast.success('길드가 생성되었습니다. 신규 10크레딧이 지급되었습니다.');
+      enter();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : '길드 생성에 실패했습니다.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const redeem = async () => {
@@ -47,23 +61,25 @@ export function OnboardingPage() {
       toast.warning('초대 코드를 입력해 주세요.');
       return;
     }
-    setRedeeming(true);
+    setBusy(true);
     try {
-      const invite = await redeemInvite(inviteCode);
-      if (!invite) {
-        toast.error('유효하지 않은 초대 코드입니다.');
-        return;
-      }
-      const target = guilds.find((g) => g.id === invite.guildId);
-      if (!target) {
-        toast.error('초대된 길드를 찾을 수 없습니다.');
-        return;
-      }
-      setCurrentGuild(target.id);
-      toast.success(`${target.guildName}에 참여했습니다.`);
+      const { data, error } = await supabase.rpc('redeem_invite', {
+        p_code: inviteCode,
+      });
+      if (error) throw new Error(error.message);
+      if (!data) throw new Error('유효하지 않은 초대 코드입니다.');
+
+      await loadGuilds();
+      const guildId = data.guild_id;
+      setCurrentGuild(guildId);
+
+      const guild = useGuildStore.getState().guilds.find((g) => g.id === guildId);
+      toast.success(guild ? `${guild.guildName}에 참여했습니다.` : '길드에 참여했습니다.');
       enter();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : '초대 수락에 실패했습니다.');
     } finally {
-      setRedeeming(false);
+      setBusy(false);
     }
   };
 
@@ -88,7 +104,9 @@ export function OnboardingPage() {
                   {g.guildName.slice(0, 1)}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="text-text-primary block truncate font-semibold">{g.guildName}</span>
+                  <span className="text-text-primary block truncate font-semibold">
+                    {g.guildName}
+                  </span>
                   <span className="text-text-tertiary block truncate text-xs">
                     {g.serverName} · 크레딧 {g.credits}
                   </span>
@@ -112,7 +130,7 @@ export function OnboardingPage() {
               onChange={(e) => setGuildName(e.target.value)}
             />
             <div className="flex gap-2">
-              <Button className="flex-1" onClick={create}>
+              <Button className="flex-1" onClick={() => void create()} disabled={busy}>
                 만들기
               </Button>
               {guilds.length > 0 && (
@@ -132,27 +150,23 @@ export function OnboardingPage() {
           </button>
         )}
 
-        {/* 초대 코드로 참여 */}
         <div className="border-border-subtle mt-6 border-t pt-6">
           <p className="text-text-secondary mb-2 flex items-center gap-1.5 text-sm font-medium">
             <Ticket className="h-4 w-4" /> 초대 코드로 참여
           </p>
           <div className="flex gap-2">
             <Input
-              placeholder="예: MW-DEMO12"
+              placeholder="예: MW-XXXXXX"
               value={inviteCode}
               onChange={(e) => setInviteCode(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void redeem();
               }}
             />
-            <Button variant="secondary" onClick={() => void redeem()} disabled={redeeming}>
+            <Button variant="secondary" onClick={() => void redeem()} disabled={busy}>
               참여
             </Button>
           </div>
-          <p className="text-text-tertiary mt-1.5 text-xs">
-            길마가 준 코드를 붙여넣으세요. (데모 코드: MW-DEMO12)
-          </p>
         </div>
 
         <div className="text-text-tertiary mt-6 text-center text-xs">

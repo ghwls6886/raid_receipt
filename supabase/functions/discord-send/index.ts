@@ -51,7 +51,9 @@ Deno.serve(async (req: Request) => {
       }),
     });
 
-    // TODO(BE): raids.sent 업데이트. 발송 실패 시 [유료화 시] credit_logs reason='rollback'.
+    if (res.ok) {
+      await supabase.from('raids').update({ sent: true }).eq('id', raidId);
+    }
     return json({ ok: res.ok, status: res.status });
   } catch (e) {
     return json({ ok: false, error: String(e) }, 500);

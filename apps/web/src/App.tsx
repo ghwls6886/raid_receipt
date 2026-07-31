@@ -18,11 +18,15 @@ import { AdminPage } from '@/pages/AdminPage';
 import { ManualPage } from '@/pages/ManualPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { initTheme } from '@/stores/useThemeStore';
+import { useAuthStore } from '@/stores/useAuthStore';
 
 function App() {
+  const initialize = useAuthStore((s) => s.initialize);
+
   useEffect(() => {
     initTheme();
-  }, []);
+    initialize();
+  }, [initialize]);
 
   return (
     <ErrorBoundary>

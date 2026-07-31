@@ -86,12 +86,12 @@ enable_confirmations = false
 # 아래 주석을 해제하고 `pnpm db:stop && pnpm db:start` 로 재기동한다.
 # 지금 켜두면 env 가 없어 start 가 실패하므로 P3 전까지는 주석 유지.
 #
-# [auth.external.google]
-# enabled = true
-# client_id = "env(GOOGLE_CLIENT_ID)"
-# secret = "env(GOOGLE_SECRET)"
-# # 로컬 구글 로그인에는 nonce 검사 우회가 필요하다.
-# skip_nonce_check = true
+[auth.external.google]
+enabled = true
+client_id = "env(GOOGLE_CLIENT_ID)"
+secret = "env(GOOGLE_SECRET)"
+# 로컬 구글 로그인에는 nonce 검사 우회가 필요하다.
+skip_nonce_check = true
 
 [edge_runtime]
 enabled = true

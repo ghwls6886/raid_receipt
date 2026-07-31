@@ -22,11 +22,11 @@ const BG_GRADIENT = 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 45%, #fdba74 10
 /** 랜딩 (공개) — 주황 그라데이션 배경 + 가운데 글래스 카드. 다크모드 무관 라이트 고정 */
 export function LandingPage() {
   const navigate = useNavigate();
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const session = useAuthStore((s) => s.session);
   const onboarded = useAuthStore((s) => s.onboarded);
 
-  const ctaTo = isAuthenticated ? (onboarded ? '/dashboard' : '/onboarding') : '/login';
-  const ctaLabel = isAuthenticated ? '대시보드로 이동' : '무료로 시작하기';
+  const ctaTo = session ? (onboarded ? '/dashboard' : '/onboarding') : '/login';
+  const ctaLabel = session ? '대시보드로 이동' : '무료로 시작하기';
 
   // 랜딩은 마케팅 화면이라 다크모드 설정과 무관하게 항상 라이트로 고정
   useEffect(() => {
