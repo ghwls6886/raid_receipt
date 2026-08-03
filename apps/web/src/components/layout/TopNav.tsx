@@ -25,14 +25,12 @@ const NAV_ITEMS = [
   { to: '/raids', label: '레이드', Icon: ScrollText, end: false },
   { to: '/parties', label: '공대 구성', Icon: Swords, end: false },
   { to: '/members', label: '길드원', Icon: Users, end: false },
-  // 크레딧 — 과금 정책 미정이라 비활성화. 정책 확정 후 이 줄과 CreditPill 링크를 함께 복원한다.
-  // { to: '/credits', label: '크레딧', Icon: Coins, end: false },
   { to: '/settings', label: '길드 설정', Icon: Settings, end: false },
 ] as const;
 
 /**
  * 상단 탑바 — 사이드바 없는 SaaS 셸.
- * 브랜드 행(로고 + 길드 스위처 + 크레딧/테마/계정) + 언더라인 탭 내비 행.
+ * 브랜드 행(로고 + 길드 스위처 + 베타 배지/테마/계정) + 언더라인 탭 내비 행.
  */
 export function TopNav() {
   const { theme, toggleTheme } = useThemeStore();
@@ -56,7 +54,7 @@ export function TopNav() {
         </div>
 
         <div className="flex items-center gap-1.5">
-          <CreditPill />
+          <BetaPill />
           <button
             aria-label="매뉴얼"
             className="text-text-secondary hover:bg-bg-hover rounded-md p-2"
@@ -166,11 +164,8 @@ function GuildSwitcher() {
   );
 }
 
-/**
- * 무료 베타 pill — 표시 전용 배지.
- * 크레딧 정책이 미정이라 /credits 로 가는 링크를 뗐다. 정책 확정 후 button + navigate 로 복원한다.
- */
-function CreditPill() {
+/** 무료 베타 pill — 표시 전용 배지 */
+function BetaPill() {
   return (
     <span className="border-border-subtle text-brand-600 mr-1 rounded-full border px-3 py-1.5 text-xs font-semibold">
       무료 베타

@@ -23,10 +23,14 @@ export function OnboardingPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    void loadGuilds().then(() => {
-      const { guilds: loaded } = useGuildStore.getState();
-      if (loaded.length === 0) setCreating(true);
-    });
+    void loadGuilds()
+      .then(() => {
+        const { guilds: loaded } = useGuildStore.getState();
+        if (loaded.length === 0) setCreating(true);
+      })
+      .catch((e: unknown) => {
+        toast.error(e instanceof Error ? e.message : '길드 목록을 불러오지 못했습니다.');
+      });
   }, [loadGuilds]);
 
   const enter = () => {
@@ -47,7 +51,7 @@ export function OnboardingPage() {
     setBusy(true);
     try {
       await addGuild(serverName, guildName);
-      toast.success('길드가 생성되었습니다. 신규 10크레딧이 지급되었습니다.');
+      toast.success('길드가 생성되었습니다.');
       enter();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : '길드 생성에 실패했습니다.');
@@ -108,7 +112,7 @@ export function OnboardingPage() {
                     {g.guildName}
                   </span>
                   <span className="text-text-tertiary block truncate text-xs">
-                    {g.serverName} · 크레딧 {g.credits}
+                    {g.serverName}
                   </span>
                 </span>
               </button>

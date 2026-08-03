@@ -3,20 +3,22 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
 import { RequireAuth } from '@/components/auth/RequireAuth';
 import { ErrorBoundary } from '@/components/feedback/ErrorBoundary';
-import { LandingPage } from '@/pages/LandingPage';
-import { TermsPage, PrivacyPage } from '@/pages/LegalPages';
-import { LoginPage } from '@/pages/LoginPage';
-import { OnboardingPage } from '@/pages/OnboardingPage';
-import { DashboardPage } from '@/pages/DashboardPage';
-import { RaidsPage } from '@/pages/RaidsPage';
-import { RaidNewPage } from '@/pages/RaidNewPage';
-import { PartiesPage } from '@/pages/PartiesPage';
-import { CreditsPage } from '@/pages/CreditsPage';
-import { MembersPage } from '@/pages/MembersPage';
-import { GuildSettingsPage } from '@/pages/GuildSettingsPage';
-import { AdminPage } from '@/pages/AdminPage';
-import { ManualPage } from '@/pages/ManualPage';
-import { NotFoundPage } from '@/pages/NotFoundPage';
+// 공개 화면 — 로그인 없이 접근
+import { LandingPage } from '@/pages/public/LandingPage';
+import { TermsPage, PrivacyPage } from '@/pages/public/LegalPages';
+import { NotFoundPage } from '@/pages/public/NotFoundPage';
+// 인증 · 온보딩
+import { LoginPage } from '@/pages/auth/LoginPage';
+import { OnboardingPage } from '@/pages/auth/OnboardingPage';
+// 메인 기능 — 로그인 + 길드 선택 완료 후
+import { DashboardPage } from '@/pages/app/DashboardPage';
+import { RaidsPage } from '@/pages/app/RaidsPage';
+import { RaidNewPage } from '@/pages/app/RaidNewPage';
+import { PartiesPage } from '@/pages/app/PartiesPage';
+import { MembersPage } from '@/pages/app/MembersPage';
+import { GuildSettingsPage } from '@/pages/app/GuildSettingsPage';
+import { AdminPage } from '@/pages/app/AdminPage';
+import { ManualPage } from '@/pages/app/ManualPage';
 import { initTheme } from '@/stores/useThemeStore';
 import { useAuthStore } from '@/stores/useAuthStore';
 
@@ -56,7 +58,6 @@ function App() {
             <Route element={<RaidNewPage />} path="raids/new" />
             <Route element={<RaidNewPage />} path="raids/:id/edit" />
             <Route element={<PartiesPage />} path="parties" />
-            <Route element={<CreditsPage />} path="credits" />
             <Route element={<MembersPage />} path="members" />
             <Route element={<GuildSettingsPage />} path="settings" />
             <Route element={<AdminPage />} path="admin" />

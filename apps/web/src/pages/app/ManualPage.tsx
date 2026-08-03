@@ -7,7 +7,6 @@ import {
   Swords,
   ScrollText,
   Plus,
-  Coins,
   Settings,
   Wrench,
   Lightbulb,
@@ -37,7 +36,6 @@ const ICON_BY_ID: Record<string, LucideIcon> = {
   parties: Swords,
   raids: ScrollText,
   'raid-new': Plus,
-  credits: Coins,
   settings: Settings,
   admin: Wrench,
 };

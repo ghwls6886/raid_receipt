@@ -8,7 +8,6 @@
  * 컬럼명 변환: DB snake_case ↔ FE camelCase
  */
 import { supabase } from '@/lib/supabase';
-import { useGuildStore } from '@/stores/useGuildStore';
 import { DEFAULT_COOLDOWN_HOURS } from '@/lib/bossTimer';
 import { calcSettlement } from '@/lib/settlement';
 
@@ -37,10 +36,6 @@ export interface DashboardStats {
   monthNetProfit: number;
   raidCount: number;
   topContributor: { name: string; raidCount: number } | null;
-}
-
-export function currentGuildId(): string {
-  return useGuildStore.getState().currentGuildId;
 }
 
 export async function getRaids(guildId: string): Promise<RaidRow[]> {
@@ -558,12 +553,24 @@ export async function saveRaid(guildId: string, input: RaidInput): Promise<RaidR
   const penaltyTypeIds = new Set(input.participants.flatMap((p) => p.penaltyTypeIds));
   const penaltyTypeMap: Map<string, { name: string; calc_type: string; value: number }> = new Map();
   if (penaltyTypeIds.size > 0) {
-    const { data: ptRows } = await supabase
+    const { data: ptRows, error: ptError } = await supabase
       .from('penalty_types')
       .select('id, name, calc_type, value')
       .in('id', [...penaltyTypeIds]);
+    // 조회가 실패하면 penaltyTypeMap 이 빈 채로 남아 패널티가 전부 누락된 상태로 계산된다.
+    // 분배금이 틀린 레이드가 조용히 저장·발송되므로 여기서 반드시 중단해야 한다.
+    throwIfError(ptError);
+
     for (const pt of ptRows ?? []) {
       penaltyTypeMap.set(pt.id, { name: pt.name, calc_type: pt.calc_type, value: pt.value });
+    }
+
+    // 요청한 패널티 유형이 하나라도 사라졌다면(삭제·권한) 마찬가지로 금액이 틀어진다
+    const missing = [...penaltyTypeIds].filter((id) => !penaltyTypeMap.has(id));
+    if (missing.length > 0) {
+      throw new Error(
+        '적용된 패널티 유형을 찾을 수 없습니다. 길드 설정에서 패널티 정책을 확인해 주세요.',
+      );
     }
   }
 
@@ -1027,38 +1034,51 @@ export interface MemberStat {
   totalReceived: number;
 }
 
-/** P7 에서 view/RPC 집계로 교체 예정 — 지금은 클라이언트 집계 */
-export async function getMemberStats(guildId: string): Promise<MemberStat[]> {
-  const { data, error } = await supabase
-    .from('raid_participants')
-    .select('member_id, final_amount, members(nickname, job)')
-    .not('member_id', 'is', null)
-    .in(
-      'raid_id',
-      (
-        await supabase
-          .from('raids')
-          .select('id')
-          .eq('guild_id', guildId)
-          .eq('status', 'CONFIRMED')
-      ).data?.map((r) => r.id) ?? [],
-    );
-  throwIfError(error);
+/** 한 번에 가져올 행 수. Supabase 기본 상한(1000)보다 낮게 잡아 페이지 경계를 명확히 한다 */
+const PAGE_SIZE = 1000;
 
+/**
+ * P7 에서 view/RPC 집계로 교체 예정 — 지금은 클라이언트 집계.
+ *
+ * raids 를 !inner 조인해 확정 레이드로 좁힌다.
+ * 예전에는 raid_id 목록을 먼저 조회해 .in() 으로 넘겼는데,
+ *   - 안쪽 쿼리의 error 를 검사하지 않아 실패 시 빈 통계가 조용히 반환됐고
+ *   - 확정 레이드가 0건이면 .in('raid_id', []) 이 나갔으며
+ *   - 왕복이 2회였다.
+ */
+export async function getMemberStats(guildId: string): Promise<MemberStat[]> {
   const map = new Map<string, MemberStat>();
-  for (const p of data ?? []) {
-    if (!p.member_id) continue;
-    const m = p.members as unknown as { nickname: string; job: string } | null;
-    const existing = map.get(p.member_id) ?? {
-      memberId: p.member_id,
-      nickname: m?.nickname ?? '알수없음',
-      job: m?.job ?? '',
-      raidCount: 0,
-      totalReceived: 0,
-    };
-    existing.raidCount += 1;
-    existing.totalReceived += p.final_amount;
-    map.set(p.member_id, existing);
+
+  // 참여 행은 레이드 수에 비례해 늘어난다. 한 페이지에서 끊기면 통계가
+  // 조용히 축소되므로 마지막 페이지까지 명시적으로 돌린다.
+  for (let page = 0; ; page += 1) {
+    const { data, error } = await supabase
+      .from('raid_participants')
+      .select('member_id, final_amount, members(nickname, job), raids!inner(guild_id, status)')
+      .not('member_id', 'is', null)
+      .eq('raids.guild_id', guildId)
+      .eq('raids.status', 'CONFIRMED')
+      .order('member_id', { ascending: true })
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+    throwIfError(error);
+
+    const rows = data ?? [];
+    for (const p of rows) {
+      if (!p.member_id) continue;
+      const m = p.members as unknown as { nickname: string; job: string } | null;
+      const existing = map.get(p.member_id) ?? {
+        memberId: p.member_id,
+        nickname: m?.nickname ?? '알수없음',
+        job: m?.job ?? '',
+        raidCount: 0,
+        totalReceived: 0,
+      };
+      existing.raidCount += 1;
+      existing.totalReceived += p.final_amount;
+      map.set(p.member_id, existing);
+    }
+
+    if (rows.length < PAGE_SIZE) break;
   }
 
   return [...map.values()].sort((a, b) => b.raidCount - a.raidCount);
