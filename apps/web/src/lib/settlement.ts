@@ -4,10 +4,24 @@
  *   실수익      = Σ(판매가 - 판매가 × 수수료%)   ← 경매장 수수료 등
  *   순수익      = 실수익 - 공대경비
  *   공대장 뽀찌  = 순수익 × 뽀찌%              (순수익이 양수일 때만)
- *   기본 1인당   = (순수익 - 뽀찌) / 참여인원
+ *   분배 대상액  = 순수익 - 뽀찌
+ *   n빵 대상액   = 분배 대상액 - 역할 지원금
+ *   기본 1인당   = n빵 대상액 / 참여인원
  *
  * 용병도 n빵을 치므로 별도 비용 항목이 아니라 참여자로 들어온다. 소모품·입장료 등
  * "쓴 돈"은 공대 경비(expenseTotal) 하나로 합쳐 순수익에서 차감한다.
+ *
+ * 역할 지원금(보우마스터 샤프아이즈·비숍 부활 등)은 특정 역할을 맡은 참여자에게 n빵 전에
+ * 먼저 떼어주는 몫이다. 공대장 뽀찌를 뗀 **뒤**에 차감하므로 공대장 몫은 줄지 않고 공대원
+ * 전원이 1/N 씩 부담한다. 한 사람에게 여러 개가 붙을 수 있고 금액은 합산된다.
+ *
+ *   - 이탈해도 지원금은 전액 지급한다. 감액이 필요하면 패널티로 건다 — 규칙을 한 곳에만 둔다.
+ *   - 단 **몰수 대상자(기본 몫을 통째로 뺏긴 사람)에게는 지급하지 않는다.** 노쇼로 100%
+ *     몰수당한 사람이 지원금만 챙겨가는 걸 막는다. 배정됐던 금액은 수령자가 없으므로
+ *     orphanedPenalty 와 같은 취급으로 leftover 에 흘려 잔돈 정책에 맡긴다.
+ *   - 지원금 합계가 분배 대상액을 넘으면 기본 1인당이 음수가 되므로 비례 축소한다.
+ *   - 패널티의 percent 는 지원금을 **뺀** 기본 1인당 기준이다. 지원금까지 기준에 넣으면
+ *     같은 "지각 10%"가 역할에 따라 다른 금액이 되어 설명이 안 된다.
  *
  * 패널티는 참여자당 여러 개가 붙을 수 있고(예: 2페 이탈 + 지각) 금액은 합산된다.
  * 재분배 자격은 오직 "이탈 페이즈"로만 판정하므로, 벌금 유형이 몇 개든 규칙은 한 줄이다:
@@ -45,6 +59,8 @@ export interface SettlementParticipant {
   id: string;
   /** 한 사람에게 여러 개가 붙을 수 있다 (예: 2페 이탈 + 지각). 금액은 합산 */
   penalties?: SettlementPenalty[];
+  /** 역할 지원금(메소 정액). 여러 개 가능하며 합산. n빵 전에 분배 대상액에서 먼저 뗀다 */
+  subsidies?: number[];
   /** 이탈 페이즈 (1부터). null/undefined = 완주 */
   exitPhase?: number | null;
 }
@@ -62,6 +78,8 @@ export interface ParticipantResult {
   id: string;
   /** 패널티/재분배 전 기본 1인당 */
   base: number;
+  /** 실제 지급된 역할 지원금 (몰수 대상자는 0) */
+  subsidy: number;
   /** 차감된 패널티 */
   penalty: number;
   /** 재분배로 추가 수령 */
@@ -85,6 +103,16 @@ export interface SettlementResult {
   leaderPpoji: number;
   /** 참여자에게 분배되는 총액 (순수익 - 뽀찌) */
   distributable: number;
+  /** 분배 대상액에서 뗀 역할 지원금 총액 (비례 축소 후 기준) */
+  subsidyTotal: number;
+  /** 실제 참여자에게 지급된 지원금 합계 (몰수 대상자 제외) */
+  subsidyPaid: number;
+  /** 몰수 대상자에게 배정됐다가 지급되지 않고 잔돈으로 넘어간 지원금 */
+  forfeitedSubsidy: number;
+  /** 지원금 합계가 분배 대상액을 넘어 비례 축소됐는지 — UI 경고용 */
+  subsidyCapped: boolean;
+  /** n빵 대상액 (분배 대상액 - 지원금 총액). 기본 1인당의 분자 */
+  distributableAfterSubsidy: number;
   participantCount: number;
   basePerPerson: number;
   /** 패널티로 걷힌 총액 */
@@ -198,9 +226,21 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
   const leaderPpoji = netProfit > 0 ? Math.floor(netProfit * rate) : 0;
   const distributable = netProfit - leaderPpoji;
 
+  // 역할 지원금은 n빵 전에 분배 대상액에서 뗀다. 합계가 분배 대상액을 넘으면
+  // 기본 1인당이 음수가 되므로 비례 축소한다 (전원 마이너스 수령 방지).
+  const requestedSubsidies = input.participants.map((p) => Math.max(0, sum(p.subsidies ?? [])));
+  const requestedTotal = sum(requestedSubsidies);
+  const subsidyCap = Math.max(0, distributable);
+  const subsidyCapped = requestedTotal > subsidyCap;
+  const subsidies = subsidyCapped
+    ? requestedSubsidies.map((v) => Math.floor((v * subsidyCap) / requestedTotal))
+    : requestedSubsidies;
+  const subsidyTotal = sum(subsidies);
+  const distributableAfterSubsidy = distributable - subsidyTotal;
+
   const n = input.participants.length;
-  const basePerPerson = n > 0 ? Math.floor(distributable / n) : 0;
-  const baseRemainder = n > 0 ? distributable - basePerPerson * n : 0;
+  const basePerPerson = n > 0 ? Math.floor(distributableAfterSubsidy / n) : 0;
+  const baseRemainder = n > 0 ? distributableAfterSubsidy - basePerPerson * n : 0;
 
   const penalties = calcPenalties(input.participants, basePerPerson);
   // 차감 후 기본 몫이 0 → 몰수. 노쇼 100% 든 기본 1인당을 넘는 정액 벌금이든 동일 취급
@@ -211,15 +251,23 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
     forfeited,
   );
 
+  // 몰수 대상자에게는 지원금을 지급하지 않는다. 이미 분배 대상액에서는 뗀 뒤라
+  // 남는 금액은 수령자가 없으므로 orphanedPenalty 와 똑같이 잔돈 정책으로 흘린다.
+  const paidSubsidies = subsidies.map((amount, i) => (forfeited[i] ? 0 : amount));
+  const subsidyPaid = sum(paidSubsidies);
+  const forfeitedSubsidy = subsidyTotal - subsidyPaid;
+
   const participants: ParticipantResult[] = input.participants.map((p, i) => {
     const penalty = penalties[i] ?? 0;
     const gained = redistributed[i] ?? 0;
+    const subsidy = paidSubsidies[i] ?? 0;
     return {
       id: p.id,
       base: basePerPerson,
+      subsidy,
       penalty,
       redistributed: gained,
-      final: basePerPerson - penalty + gained,
+      final: basePerPerson + subsidy - penalty + gained,
       forfeited: forfeited[i] ?? false,
     };
   });
@@ -232,11 +280,16 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
     netProfit,
     leaderPpoji,
     distributable,
+    subsidyTotal,
+    subsidyPaid,
+    forfeitedSubsidy,
+    subsidyCapped,
+    distributableAfterSubsidy,
     participantCount: n,
     basePerPerson,
     penaltyPool: sum(penalties),
     orphanedPenalty: orphaned,
-    leftover: baseRemainder + remainder + orphaned,
+    leftover: baseRemainder + remainder + orphaned + forfeitedSubsidy,
     participants,
   };
 }

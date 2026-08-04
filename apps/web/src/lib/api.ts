@@ -41,7 +41,9 @@ export interface DashboardStats {
 export async function getRaids(guildId: string): Promise<RaidRow[]> {
   const { data, error } = await supabase
     .from('raids')
-    .select('id, date, boss_name, party_name, net_profit, participant_count, per_person, status, sent')
+    .select(
+      'id, date, boss_name, party_name, net_profit, participant_count, per_person, status, sent',
+    )
     .eq('guild_id', guildId)
     .order('date', { ascending: false });
   throwIfError(error);
@@ -61,7 +63,9 @@ export async function getRaids(guildId: string): Promise<RaidRow[]> {
 export async function getRaid(guildId: string, raidId: string): Promise<RaidRow | null> {
   const { data, error } = await supabase
     .from('raids')
-    .select('id, date, boss_name, party_name, net_profit, participant_count, per_person, status, sent')
+    .select(
+      'id, date, boss_name, party_name, net_profit, participant_count, per_person, status, sent',
+    )
     .eq('guild_id', guildId)
     .eq('id', raidId)
     .maybeSingle();
@@ -191,10 +195,7 @@ function toMember(r: {
 }
 
 export async function getMembers(guildId: string, includeInactive = false): Promise<Member[]> {
-  let query = supabase
-    .from('members')
-    .select('*')
-    .eq('guild_id', guildId);
+  let query = supabase.from('members').select('*').eq('guild_id', guildId);
   if (!includeInactive) query = query.eq('is_active', true);
   const { data, error } = await query;
   throwIfError(error);
@@ -279,7 +280,9 @@ export async function deactivateMember(
   if (!member) throw new Error('길드원을 찾을 수 없습니다.');
   if (!member.isActive) throw new Error('이미 비활성 상태입니다.');
   if (member.role === 'MASTER' && masterCount(members) <= 1) {
-    throw new Error('마지막 관리자(마스터)는 비활성화할 수 없습니다. 다른 관리자를 먼저 임명하세요.');
+    throw new Error(
+      '마지막 관리자(마스터)는 비활성화할 수 없습니다. 다른 관리자를 먼저 임명하세요.',
+    );
   }
 
   // is_active = false
@@ -305,7 +308,11 @@ export async function deactivateMember(
     if (wasLeader) partiesNeedingLeader.push(party.name);
 
     // party_members 에서 삭제
-    await supabase.from('party_members').delete().eq('party_id', party.id).eq('member_id', memberId);
+    await supabase
+      .from('party_members')
+      .delete()
+      .eq('party_id', party.id)
+      .eq('member_id', memberId);
     // 공대장이었으면 비우기
     if (wasLeader) {
       await supabase.from('parties').update({ leader_id: null }).eq('id', party.id);
@@ -354,7 +361,8 @@ export const MAX_COOLDOWN_HOURS = 720;
 
 function cooldownError(hours: number): string | null {
   if (!Number.isInteger(hours) || hours < 1) return '쿨타임은 1시간 이상의 정수여야 합니다.';
-  if (hours > MAX_COOLDOWN_HOURS) return `쿨타임은 ${MAX_COOLDOWN_HOURS}시간(30일) 이하여야 합니다.`;
+  if (hours > MAX_COOLDOWN_HOURS)
+    return `쿨타임은 ${MAX_COOLDOWN_HOURS}시간(30일) 이하여야 합니다.`;
   return null;
 }
 
@@ -384,10 +392,7 @@ export interface GameServer {
 }
 
 export async function getServers(): Promise<GameServer[]> {
-  const { data, error } = await supabase
-    .from('game_servers')
-    .select('id, name')
-    .order('name');
+  const { data, error } = await supabase.from('game_servers').select('id, name').order('name');
   throwIfError(error);
   return data ?? [];
 }
@@ -449,6 +454,8 @@ export interface RaidParticipant {
   memberId: string | null;
   guestName: string | null;
   penaltyTypeIds: string[];
+  /** 이 참여자에게 붙은 역할 지원금 유형 (여러 개 가능, 금액은 합산) */
+  subsidyTypeIds: string[];
   exitPhase: number | null;
 }
 
@@ -491,7 +498,9 @@ export async function getRaidDetail(raidId: string): Promise<RaidDetail | null> 
     supabase.from('raid_expenses').select('*').eq('raid_id', raidId).order('sort_order'),
     supabase
       .from('raid_participants')
-      .select('*, raid_participant_penalties(penalty_type_id)')
+      .select(
+        '*, raid_participant_penalties(penalty_type_id), raid_participant_subsidies(subsidy_type_id)',
+      )
       .eq('raid_id', raidId)
       .order('sort_order'),
   ]);
@@ -517,10 +526,13 @@ export async function getRaidDetail(raidId: string): Promise<RaidDetail | null> 
     participants: (participantsRes.data ?? []).map((p) => ({
       memberId: p.member_id,
       guestName: p.guest_name,
-      penaltyTypeIds: (
-        p.raid_participant_penalties as { penalty_type_id: string | null }[]
-      )
+      penaltyTypeIds: (p.raid_participant_penalties as { penalty_type_id: string | null }[])
         .map((pp) => pp.penalty_type_id)
+        .filter((id): id is string => id !== null),
+      // 유형이 삭제됐으면(subsidy_type_id = null) 칩으로 되살릴 수 없으므로 제외한다.
+      // 확정 건은 raid_participant_subsidies 의 name/amount 스냅샷이 영수증을 지킨다.
+      subsidyTypeIds: (p.raid_participant_subsidies as { subsidy_type_id: string | null }[])
+        .map((ps) => ps.subsidy_type_id)
         .filter((id): id is string => id !== null),
       exitPhase: p.exit_phase,
     })),
@@ -574,6 +586,31 @@ export async function saveRaid(guildId: string, input: RaidInput): Promise<RaidR
     }
   }
 
+  // ── 1-b) 지원금 유형 조회 (스냅샷용) ──
+  // 패널티와 같은 이유로 실패·누락 시 반드시 중단한다. 지원금이 빠진 채 계산되면
+  // n빵 대상액이 커져 전원의 분배금이 틀린 영수증이 조용히 발송된다.
+  const subsidyTypeIds = new Set(input.participants.flatMap((p) => p.subsidyTypeIds));
+  const subsidyTypeMap: Map<string, { name: string; amount: number }> = new Map();
+
+  if (subsidyTypeIds.size > 0) {
+    const { data: stRows, error: stError } = await supabase
+      .from('subsidy_types')
+      .select('id, name, amount')
+      .in('id', [...subsidyTypeIds]);
+    throwIfError(stError);
+
+    for (const st of stRows ?? []) {
+      subsidyTypeMap.set(st.id, { name: st.name, amount: st.amount });
+    }
+
+    const missing = [...subsidyTypeIds].filter((id) => !subsidyTypeMap.has(id));
+    if (missing.length > 0) {
+      throw new Error(
+        '적용된 지원금 유형을 찾을 수 없습니다. 길드 설정에서 지원금 정책을 확인해 주세요.',
+      );
+    }
+  }
+
   // ── 2) 정산 재계산 ──
   const expenseTotal = input.expenses.reduce((sum, e) => sum + e.cost, 0);
   const settlement = calcSettlement({
@@ -588,6 +625,9 @@ export async function saveRaid(guildId: string, input: RaidInput): Promise<RaidR
           calcType: pt.calc_type.toLowerCase() as 'percent' | 'fixed',
           value: pt.value,
         })),
+      subsidies: p.subsidyTypeIds
+        .map((id) => subsidyTypeMap.get(id)?.amount)
+        .filter((amount): amount is number => amount != null),
       exitPhase: p.exitPhase,
     })),
     ppojiRate: (input.ppojiPct || 0) / 100,
@@ -607,6 +647,7 @@ export async function saveRaid(guildId: string, input: RaidInput): Promise<RaidR
     expense_total: settlement.expenseTotal,
     net_profit: settlement.netProfit,
     leader_ppoji: settlement.leaderPpoji,
+    subsidy_total: settlement.subsidyTotal,
     leftover: settlement.leftover,
     participant_count: settlement.participantCount,
     per_person: settlement.basePerPerson,
@@ -627,6 +668,7 @@ export async function saveRaid(guildId: string, input: RaidInput): Promise<RaidR
         guest_name: p.guestName,
         exit_phase: p.exitPhase,
         base: sr?.base ?? 0,
+        subsidy: sr?.subsidy ?? 0,
         penalty: sr?.penalty ?? 0,
         redistributed: sr?.redistributed ?? 0,
         final_amount: sr?.final ?? 0,
@@ -641,6 +683,15 @@ export async function saveRaid(guildId: string, input: RaidInput): Promise<RaidR
               calc_type: pt.calc_type.toUpperCase(),
               value: pt.value,
             };
+          })
+          .filter((r): r is NonNullable<typeof r> => r != null),
+        // 유형 등록 금액을 그대로 스냅샷한다. 비례 축소·몰수로 실제 지급액이
+        // 달라지는 것은 participants.subsidy(정산 결과)가 들고 있다.
+        subsidies: p.subsidyTypeIds
+          .map((stId) => {
+            const st = subsidyTypeMap.get(stId);
+            if (!st) return null;
+            return { subsidy_type_id: stId, name: st.name, amount: st.amount };
           })
           .filter((r): r is NonNullable<typeof r> => r != null),
       };
@@ -992,10 +1043,74 @@ export async function addPenaltyType(
 
 export async function deletePenaltyType(_guildId: string, id: string): Promise<void> {
   // soft delete: is_active = false (확정된 레이드의 penalty_type_id 참조 보존)
-  const { error } = await supabase
-    .from('penalty_types')
-    .update({ is_active: false })
-    .eq('id', id);
+  const { error } = await supabase.from('penalty_types').update({ is_active: false }).eq('id', id);
+  throwIfError(error);
+}
+
+// ─── 역할 지원금 정책 ───────────────────────────────────────
+export interface SubsidyType {
+  id: string;
+  guildId: string;
+  name: string;
+  /** 자동 프리필 대상 직업. null = 직업 무관(수동으로만 붙임 — 용병 등) */
+  job: string | null;
+  /** 메소 정액 */
+  amount: number;
+}
+
+export async function getSubsidyTypes(guildId: string): Promise<SubsidyType[]> {
+  const { data, error } = await supabase
+    .from('subsidy_types')
+    .select('*')
+    .eq('guild_id', guildId)
+    .eq('is_active', true);
+  throwIfError(error);
+  return (data ?? []).map((s) => ({
+    id: s.id,
+    guildId: s.guild_id,
+    name: s.name,
+    job: s.job,
+    amount: s.amount,
+  }));
+}
+
+export interface SubsidyTypeInput {
+  name: string;
+  job: string | null;
+  amount: number;
+}
+
+export async function addSubsidyType(
+  guildId: string,
+  input: SubsidyTypeInput,
+): Promise<SubsidyType> {
+  const name = input.name.trim();
+  if (!name) throw new Error('지원금명을 입력해 주세요.');
+  if (input.amount <= 0) throw new Error('지원금은 1 메소 이상이어야 합니다.');
+
+  const { data, error } = await supabase
+    .from('subsidy_types')
+    .insert({ guild_id: guildId, name, job: input.job, amount: input.amount })
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === '23505') throw new Error(`이미 등록된 지원금입니다: ${name}`);
+    throw new Error(error.message);
+  }
+
+  return {
+    id: data.id,
+    guildId: data.guild_id,
+    name: data.name,
+    job: data.job,
+    amount: data.amount,
+  };
+}
+
+export async function deleteSubsidyType(_guildId: string, id: string): Promise<void> {
+  // soft delete: is_active = false (확정된 레이드의 subsidy_type_id 참조 보존)
+  const { error } = await supabase.from('subsidy_types').update({ is_active: false }).eq('id', id);
   throwIfError(error);
 }
 

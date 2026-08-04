@@ -44,6 +44,16 @@ Deno.serve(async (req: Request) => {
               { name: '총 순수익', value: `${meso(raid.net_profit)} 메소`, inline: true },
               { name: '1인당', value: `${meso(raid.per_person)} 메소`, inline: true },
               { name: '참여', value: `${raid.participant_count}명`, inline: true },
+              // 지원금을 안 쓰는 길드가 대부분이라 0 이면 줄을 만들지 않는다
+              ...(raid.subsidy_total > 0
+                ? [
+                    {
+                      name: '역할 지원금',
+                      value: `${meso(raid.subsidy_total)} 메소 (n빵 전 선지급)`,
+                      inline: false,
+                    },
+                  ]
+                : []),
             ],
             footer: { text: '메월드 길드 정산 매니저' },
           },

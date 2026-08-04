@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -7,6 +7,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.15"
+  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -641,6 +646,45 @@ export type Database = {
           },
         ]
       }
+      raid_participant_subsidies: {
+        Row: {
+          amount: number
+          id: string
+          name: string
+          raid_participant_id: string
+          subsidy_type_id: string | null
+        }
+        Insert: {
+          amount: number
+          id?: string
+          name: string
+          raid_participant_id: string
+          subsidy_type_id?: string | null
+        }
+        Update: {
+          amount?: number
+          id?: string
+          name?: string
+          raid_participant_id?: string
+          subsidy_type_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "raid_participant_subsidies_raid_participant_id_fkey"
+            columns: ["raid_participant_id"]
+            isOneToOne: false
+            referencedRelation: "raid_participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "raid_participant_subsidies_subsidy_type_id_fkey"
+            columns: ["subsidy_type_id"]
+            isOneToOne: false
+            referencedRelation: "subsidy_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       raid_participants: {
         Row: {
           base: number
@@ -654,6 +698,7 @@ export type Database = {
           raid_id: string
           redistributed: number
           sort_order: number
+          subsidy: number
         }
         Insert: {
           base?: number
@@ -667,6 +712,7 @@ export type Database = {
           raid_id: string
           redistributed?: number
           sort_order?: number
+          subsidy?: number
         }
         Update: {
           base?: number
@@ -680,6 +726,7 @@ export type Database = {
           raid_id?: string
           redistributed?: number
           sort_order?: number
+          subsidy?: number
         }
         Relationships: [
           {
@@ -718,6 +765,7 @@ export type Database = {
           remainder_policy: Database["public"]["Enums"]["remainder_policy"]
           sent: boolean
           status: Database["public"]["Enums"]["raid_status"]
+          subsidy_total: number
           total_sales: number
           updated_at: string
         }
@@ -740,6 +788,7 @@ export type Database = {
           remainder_policy?: Database["public"]["Enums"]["remainder_policy"]
           sent?: boolean
           status?: Database["public"]["Enums"]["raid_status"]
+          subsidy_total?: number
           total_sales?: number
           updated_at?: string
         }
@@ -762,12 +811,48 @@ export type Database = {
           remainder_policy?: Database["public"]["Enums"]["remainder_policy"]
           sent?: boolean
           status?: Database["public"]["Enums"]["raid_status"]
+          subsidy_total?: number
           total_sales?: number
           updated_at?: string
         }
         Relationships: [
           {
             foreignKeyName: "raids_guild_id_fkey"
+            columns: ["guild_id"]
+            isOneToOne: false
+            referencedRelation: "guilds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subsidy_types: {
+        Row: {
+          amount: number
+          guild_id: string
+          id: string
+          is_active: boolean
+          job: string | null
+          name: string
+        }
+        Insert: {
+          amount?: number
+          guild_id: string
+          id?: string
+          is_active?: boolean
+          job?: string | null
+          name: string
+        }
+        Update: {
+          amount?: number
+          guild_id?: string
+          id?: string
+          is_active?: boolean
+          job?: string | null
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subsidy_types_guild_id_fkey"
             columns: ["guild_id"]
             isOneToOne: false
             referencedRelation: "guilds"
@@ -802,6 +887,7 @@ export type Database = {
           remainder_policy: Database["public"]["Enums"]["remainder_policy"]
           sent: boolean
           status: Database["public"]["Enums"]["raid_status"]
+          subsidy_total: number
           total_sales: number
           updated_at: string
         }
@@ -897,6 +983,7 @@ export type Database = {
           remainder_policy: Database["public"]["Enums"]["remainder_policy"]
           sent: boolean
           status: Database["public"]["Enums"]["raid_status"]
+          subsidy_total: number
           total_sales: number
           updated_at: string
         }
@@ -1079,4 +1166,3 @@ export const Constants = {
     },
   },
 } as const
-

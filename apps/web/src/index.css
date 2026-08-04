@@ -47,6 +47,22 @@ body {
 }
 
 /* ========================================
+   Utilities
+   ======================================== */
+/**
+ * 스크롤은 되지만 스크롤바는 그리지 않는다 (모바일 칩/탭 줄처럼).
+ * 넘친다는 신호는 잘려 보이는 내용으로만 남는다.
+ * 키보드 접근성은 유지된다 — 칩에 Tab 으로 이동하면 브라우저가 알아서 스크롤한다.
+ */
+@utility scrollbar-none {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* 구형 Edge/IE */
+  &::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
+}
+
+/* ========================================
    Custom Animations
    ======================================== */
 @keyframes fade-in {

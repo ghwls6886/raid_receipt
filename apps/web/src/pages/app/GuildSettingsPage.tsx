@@ -8,6 +8,10 @@ import {
   getPenaltyTypes,
   addPenaltyType,
   deletePenaltyType,
+  getSubsidyTypes,
+  addSubsidyType,
+  deleteSubsidyType,
+  JOB_GROUPS,
   createInvite,
   getServers,
   getAccounts,
@@ -20,6 +24,7 @@ import {
   type GuildAccount,
   type PenaltyCalcType,
   type PenaltyType,
+  type SubsidyType,
 } from '@/lib/api';
 import { formatMeso } from '@/lib/format';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -74,6 +79,7 @@ export function GuildSettingsPage() {
 
         <AccountRoleCard />
         <PenaltyPolicyCard />
+        <SubsidyPolicyCard />
         <InviteCard />
         <AuditLogCard />
       </div>
@@ -453,6 +459,135 @@ function PenaltyPolicyCard() {
           className="shrink-0"
           onClick={() => addMutation.mutate()}
           disabled={!name.trim() || addMutation.isPending}
+        >
+          <Plus className="h-4 w-4" /> 추가
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+/** 지원금 정책 — 보우마스터 샤프아이즈·비숍 부활 등 역할 대가 (CRUD) */
+function SubsidyPolicyCard() {
+  const guild = useCurrentGuild();
+  const queryClient = useQueryClient();
+  const [name, setName] = useState('');
+  /** 빈 문자열 = 직업 무관(수동 전용). DB 에는 null 로 들어간다 */
+  const [job, setJob] = useState('');
+  const [amount, setAmount] = useState(1000000);
+
+  const { data: types, isLoading } = useQuery({
+    queryKey: ['subsidy-types', guild.id],
+    queryFn: () => getSubsidyTypes(guild.id),
+  });
+
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: ['subsidy-types', guild.id] });
+    void queryClient.invalidateQueries({ queryKey: ['audit', guild.id] });
+  };
+
+  const addMutation = useMutation({
+    mutationFn: () => addSubsidyType(guild.id, { name, job: job || null, amount }),
+    onSuccess: () => {
+      toast.success('지원금이 추가되었습니다.');
+      setName('');
+      invalidate();
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : '추가에 실패했습니다.'),
+  });
+
+  const remove = async (t: SubsidyType) => {
+    const ok = await confirm.danger(`'${t.name}' 지원금을 삭제할까요?`, '지원금 삭제');
+    if (!ok) return;
+    await deleteSubsidyType(guild.id, t.id);
+    toast.success('삭제되었습니다.');
+    invalidate();
+  };
+
+  return (
+    <Card className="space-y-4 p-5 lg:col-span-2">
+      <div className="flex items-center justify-between">
+        <h2 className="text-card-title">지원금 정책</h2>
+        <span className="text-text-tertiary text-xs">역할 대가 · n빵 전에 먼저 지급</span>
+      </div>
+
+      <p className="text-text-tertiary text-xs leading-relaxed">
+        공대장 뽀찌를 뗀 <b className="text-text-secondary">뒤</b>에 분배 대상액에서 차감하므로
+        공대장 몫은 줄지 않고 공대원 전원이 1/N씩 부담합니다. 대상 직업을 지정하면 레이드 화면에서
+        해당 직업 길드원에게 자동으로 켜지고, 안 줄 날은 칩을 눌러 끄면 됩니다. 직업을{' '}
+        <b className="text-text-secondary">직업 무관</b>으로 두면 용병 등에게 수동으로만 붙습니다.
+      </p>
+
+      {isLoading ? (
+        <div className="py-6">
+          <LoadingState message="불러오는 중..." />
+        </div>
+      ) : types && types.length > 0 ? (
+        <ul className="divide-border-subtle divide-y">
+          {types.map((t) => (
+            <li key={t.id} className="flex items-center justify-between py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-text-primary text-sm font-medium">{t.name}</span>
+                <Badge tone={t.job ? 'success' : 'neutral'}>{t.job ?? '직업 무관'}</Badge>
+                <span className="text-text-secondary text-sm tabular-nums">
+                  +{formatMeso(t.amount)} 메소
+                </span>
+              </div>
+              <button
+                aria-label="지원금 삭제"
+                className="text-text-muted hover:text-error-600 rounded-md p-1.5"
+                onClick={() => remove(t)}
+                type="button"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-text-muted text-sm">등록된 지원금이 없습니다.</p>
+      )}
+
+      <div className="border-border-subtle flex flex-wrap items-end gap-2 border-t pt-3">
+        <div className="min-w-40 flex-1">
+          <label className="text-text-secondary mb-1 block text-xs font-medium">지원금명</label>
+          <Input
+            placeholder="예: 샤프아이즈 지원"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="text-text-secondary mb-1 block text-xs font-medium">대상 직업</label>
+          <Select className="w-44" value={job} onChange={(e) => setJob(e.target.value)}>
+            <option value="">직업 무관 (수동 지정)</option>
+            {JOB_GROUPS.map((g) => (
+              <optgroup key={g.category} label={g.category}>
+                {g.jobs.map((j) => (
+                  <option key={j} value={j}>
+                    {j}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <label className="text-text-secondary mb-1 block text-xs font-medium">금액 (메소)</label>
+          <Input
+            className="w-36"
+            type="number"
+            min={0}
+            step={100000}
+            value={amount}
+            onChange={(e) => setAmount(Number(e.target.value) || 0)}
+            placeholder="1000000"
+          />
+        </div>
+        <Button
+          className="shrink-0"
+          onClick={() => addMutation.mutate()}
+          disabled={!name.trim() || amount <= 0 || addMutation.isPending}
         >
           <Plus className="h-4 w-4" /> 추가
         </Button>
