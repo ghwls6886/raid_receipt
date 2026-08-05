@@ -180,8 +180,13 @@ interface RedistributionResult {
   redistributed: number[];
   /** 정수 나눗셈으로 남은 자투리 */
   remainder: number;
-  /** 수령 자격자가 없어 아무에게도 못 간 패널티 */
+  /** 수령 자격자가 없어 아무에게도 못 간 패널티 (합계) */
   orphaned: number;
+  /**
+   * 위 금액을 "낸 사람" 별로 쪼갠 것. 잔돈으로 되돌려줄 때 낸 사람을 제외해야 하므로
+   * 합계만으로는 부족하다 — 안 그러면 벌금 낸 사람이 자기 벌금을 일부 돌려받는다.
+   */
+  orphanedBy: number[];
 }
 
 /**
@@ -196,6 +201,7 @@ function redistributePenalties(
   const n = participants.length;
   const ranks = participants.map(rankOf);
   const redistributed = new Array<number>(n).fill(0);
+  const orphanedBy = new Array<number>(n).fill(0);
   let remainder = 0;
   let orphaned = 0;
 
@@ -218,6 +224,7 @@ function redistributePenalties(
 
     if (recipients.length === 0) {
       orphaned += amount;
+      orphanedBy[i] = (orphanedBy[i] ?? 0) + amount;
       continue;
     }
 
@@ -226,7 +233,7 @@ function redistributePenalties(
     remainder += amount - per * recipients.length;
   }
 
-  return { redistributed, remainder, orphaned };
+  return { redistributed, remainder, orphaned, orphanedBy };
 }
 
 export function calcSettlement(input: SettlementInput): SettlementResult {
@@ -276,7 +283,7 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
   const penalties = calcPenalties(input.participants, basePerPerson);
   // 차감 후 기본 몫이 0 → 몰수. 노쇼 100% 든 기본 1인당을 넘는 정액 벌금이든 동일 취급
   const forfeited = penalties.map((amount) => basePerPerson > 0 && amount >= basePerPerson);
-  const { redistributed, remainder, orphaned } = redistributePenalties(
+  const { redistributed, remainder, orphaned, orphanedBy } = redistributePenalties(
     input.participants,
     penalties,
     forfeited,
@@ -292,15 +299,35 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
   // 1인당 나눗셈 끝전, 재분배 끝전, 수령자 없는 벌금, 몰수자에게 못 준 지원금.
   // 몰수 대상자는 제외한다. 자기 몫을 통째로 뺏긴 사람이 잔돈으로 되살아나면
   // 몰수의 의미가 없어지고, 남의 벌금을 못 받게 한 규칙과도 어긋난다.
-  const leftoverPool = baseRemainder + remainder + orphaned + forfeitedSubsidy;
+  const leftoverShares = new Array<number>(n).fill(0);
   const leftoverTargets: number[] = [];
   for (let i = 0; i < n; i += 1) {
     if (!forfeited[i]) leftoverTargets.push(i);
   }
+
+  // 수령 자격자가 없던 벌금은 **낸 사람을 빼고** 나눈다. 전원에게 나누면 벌금을 낸
+  // 사람이 자기 벌금의 1/N 을 돌려받아 실질 벌금이 줄어든다.
+  // 나눈 뒤 남는 끝전은 아래 일반 잔돈과 합쳐 처리한다.
+  let generalPool = baseRemainder + remainder + forfeitedSubsidy;
+  for (let i = 0; i < n; i += 1) {
+    const amount = orphanedBy[i] ?? 0;
+    if (amount <= 0) continue;
+    const targets = leftoverTargets.filter((j) => j !== i);
+    if (targets.length === 0) {
+      // 받을 사람이 정말 아무도 없으면(예: 참여자 1명) 일반 잔돈으로 흘린다
+      generalPool += amount;
+      continue;
+    }
+    const per = Math.floor(amount / targets.length);
+    for (const j of targets) leftoverShares[j] = (leftoverShares[j] ?? 0) + per;
+    generalPool += amount - per * targets.length;
+  }
+
+  // 나머지 잔돈(1인당 끝전·재분배 끝전·몰수자 지원금)은 출처를 따질 게 없어 전원에게
+  const leftoverPool = generalPool;
   const leftoverPer =
     leftoverTargets.length > 0 ? Math.floor(leftoverPool / leftoverTargets.length) : 0;
-  const leftoverShares = new Array<number>(n).fill(0);
-  for (const i of leftoverTargets) leftoverShares[i] = leftoverPer;
+  for (const i of leftoverTargets) leftoverShares[i] = (leftoverShares[i] ?? 0) + leftoverPer;
   // 여기서도 나누어떨어지지 않은 끝전(참여인원 미만의 메소)이 남는다.
   // 공대장이 있으면 그가 가져가고, 없으면 어쩔 수 없이 leftover 로 남긴다.
   let leftoverRest = leftoverPool - leftoverPer * leftoverTargets.length;
