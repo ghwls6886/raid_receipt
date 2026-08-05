@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { useCurrentGuild } from '@/stores/useGuildStore';
-import { getRaids, type RaidRow } from '@/lib/api';
+import { deleteRaid, getRaids, type RaidRow } from '@/lib/api';
+import { confirm } from '@/stores/useConfirmStore';
+import { toast } from '@/stores/useToastStore';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -71,6 +73,7 @@ function lastMonths(anchorYM: string, n: number): string[] {
 export function RaidsPage() {
   const navigate = useNavigate();
   const guild = useCurrentGuild();
+  const queryClient = useQueryClient();
   const { data, isLoading } = useQuery({
     queryKey: ['raids', guild.id],
     queryFn: () => getRaids(guild.id),
@@ -117,11 +120,30 @@ export function RaidsPage() {
 
   const onEdit = (row: RaidRow) => navigate(`/raids/${row.id}/edit`);
 
+  const onDelete = async (row: RaidRow) => {
+    const ok = await confirm.danger(
+      `${row.bossName} 임시저장 건을 삭제합니다. 되돌릴 수 없습니다.`,
+      '임시저장 삭제',
+    );
+    if (!ok) return;
+    try {
+      await deleteRaid(row.id);
+      // 대시보드 통계도 이 건을 세고 있어 같이 무효화한다.
+      await queryClient.invalidateQueries({ queryKey: ['raids', guild.id] });
+      await queryClient.invalidateQueries({ queryKey: ['dashboard-stats', guild.id] });
+      toast.success('삭제되었습니다.');
+    } catch (e: unknown) {
+      // 서버가 소유권을 다시 판정하므로 버튼이 보여도 거절될 수 있다. 사유를 그대로 보여준다.
+      const detail = e instanceof Error ? e.message : '';
+      toast.error(detail ? `삭제에 실패했습니다. (${detail})` : '삭제에 실패했습니다.');
+    }
+  };
+
   return (
     <div>
       <PageHeader
         title="레이드"
-        description="공대별 이력과 요약 · 임시저장/미발송 건은 수정할 수 있습니다"
+        description="공대별 이력과 요약 · 임시저장/미발송 건은 수정, 임시저장 건은 삭제할 수 있습니다"
         actions={
           <Button onClick={() => navigate('/raids/new')}>
             <Plus className="h-4 w-4" /> 레이드 추가
@@ -208,7 +230,7 @@ export function RaidsPage() {
                 <h3 className="text-card-title">{g.name}</h3>
                 <span className="text-text-muted text-xs">{g.rows.length}회</span>
               </div>
-              <RaidTable rows={g.rows} onEdit={onEdit} />
+              <RaidTable rows={g.rows} onDelete={(r) => void onDelete(r)} onEdit={onEdit} />
             </Card>
           ))}
         </div>

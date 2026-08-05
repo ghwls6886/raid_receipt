@@ -25,6 +25,7 @@ import {
   getRaidDetail,
   getRaid,
   saveRaid,
+  isConfirmedRaidError,
   isRaidEditable,
   isRaidMine,
   groupMembersByJob,
@@ -207,7 +208,11 @@ export function RaidNewPage() {
   const [wasConfirmed, setWasConfirmed] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   // 자동저장이 조용히 실패하면 사용자는 "임시저장이 안 된다" 고만 느낀다. 헤더에 표시한다.
-  const [autosaveFailed, setAutosaveFailed] = useState(false);
+  // 이유까지 같이 들고 있어야 한다. save_raid 는 어떤 오류든 400 하나로만 돌아오기 때문에,
+  // 메시지를 버리면 왜 실패했는지 알아낼 방법이 화면에 남지 않는다.
+  const [autosaveError, setAutosaveError] = useState<string | null>(null);
+  /** 자동저장이 겹쳐 돌면 같은 레이드를 두 트랜잭션이 동시에 지우고 다시 넣는다 */
+  const autosavingRef = useRef(false);
   const [pending, setPending] = useState(false);
   /** ③ 참여자별 정산 카드에서 여는 팝업들 (규칙 설명 · 정책 유형 즉석 추가) */
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -241,7 +246,7 @@ export function RaidNewPage() {
       return;
     }
     if (!isRaidEditable(row)) {
-      toast.error('발송 완료된 레이드는 수정할 수 없습니다.');
+      toast.error('확정된 레이드는 수정할 수 없습니다.');
       navigate('/raids');
       return;
     }
@@ -441,16 +446,29 @@ export function RaidNewPage() {
   useEffect(() => {
     if (loading || !canAutosave) return;
     const timer = setTimeout(() => {
+      // 앞선 저장이 아직 안 끝났으면 건너뛴다. save_raid 는 참여자를 통째로 지우고
+      // 다시 넣기 때문에, 같은 레이드에 두 번이 겹치면 중복 행이나 교착이 생긴다.
+      if (autosavingRef.current) return;
+      autosavingRef.current = true;
       void (async () => {
         try {
           const row = await saveRaid(guild.id, buildInput('draft', draftId));
           setDraftId(row.id);
           setLastSavedAt(new Date().toLocaleTimeString('ko-KR'));
-          setAutosaveFailed(false);
+          setAutosaveError(null);
           void queryClient.invalidateQueries({ queryKey: ['raids', guild.id] });
-        } catch {
+        } catch (error: unknown) {
+          // 이미 확정된 레이드면 재시도해도 영원히 400 이다. 자동저장을 끊는다.
+          if (isConfirmedRaidError(error)) {
+            setWasConfirmed(true);
+            setAutosaveError('이미 확정된 정산이라 자동 임시저장을 멈췄습니다');
+            return;
+          }
           // 토스트로 반복해 띄우면 입력 중 방해가 되므로 헤더 표시로만 알린다.
-          setAutosaveFailed(true);
+          // 다만 이유는 반드시 남긴다 — 없으면 400 밖에 안 보인다.
+          setAutosaveError(error instanceof Error ? error.message : '알 수 없는 오류');
+        } finally {
+          autosavingRef.current = false;
         }
       })();
     }, AUTOSAVE_MS);
@@ -652,6 +670,9 @@ export function RaidNewPage() {
     setPending(true);
     try {
       await saveRaid(guild.id, buildInput(status, draftId));
+      // 확정이 끝난 순간 자동저장을 끈다. 이 아래(무효화·토스트·이동)에서 뭐라도 실패해
+      // 화면에 머무르게 되면, 이미 CONFIRMED 가 된 레이드에 자동저장이 계속 달라붙는다.
+      if (status === 'confirmed') setWasConfirmed(true);
       await queryClient.invalidateQueries({ queryKey: ['raids', guild.id] });
       await queryClient.invalidateQueries({ queryKey: ['dashboard-stats', guild.id] });
       // 디스코드 발송은 실패해도 확정을 되돌리지 않으므로 "발송했습니다" 라고 단정하지
@@ -691,9 +712,9 @@ export function RaidNewPage() {
           <h1 className="text-page-title">{isEdit ? '레이드 수정' : '레이드 추가'}</h1>
           <p className="text-text-secondary mt-0.5 text-sm">
             {guild.serverName} · {guild.guildName}
-            {autosaveFailed ? (
+            {autosaveError ? (
               <span className="text-error-600 ml-2">
-                · 자동 임시저장 실패 — [임시저장]을 눌러 주세요
+                · 자동 임시저장 실패 — {autosaveError} ([임시저장]을 눌러 주세요)
               </span>
             ) : (
               lastSavedAt && (

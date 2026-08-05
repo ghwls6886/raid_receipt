@@ -490,8 +490,18 @@ export interface RaidDetail {
   participants: RaidParticipant[];
 }
 
+/**
+ * 수정 가능 여부 — 임시저장 건만.
+ *
+ * 확정은 되돌릴 수 없는 최종 상태다. save_raid 가 0005 부터 CONFIRMED 를 무조건
+ * 거부해 왔는데, 여기서만 "확정이어도 미발송이면 수정 가능" 으로 판정하는 바람에
+ * 편집 화면이 열리고 저장은 400 으로 튕기는 상태였다. 서버 규칙에 맞춘다.
+ *
+ * 발송은 확정과 별개 축이다. 미발송 확정 건은 고쳐서 다시 보내는 게 아니라
+ * 그대로 다시 보내야 한다 (sent 는 마지막 발송 성공 여부일 뿐이다).
+ */
 export function isRaidEditable(raid: RaidRow): boolean {
-  return raid.status === 'draft' || !raid.sent;
+  return raid.status === 'draft';
 }
 
 /**
@@ -510,6 +520,27 @@ export function isRaidMine(raid: RaidRow, userId: string | null, role: AccountRo
 /** 수정 버튼 노출 조건 — 상태(확정·발송)와 소유권을 모두 만족해야 한다 */
 export function canEditRaid(raid: RaidRow, userId: string | null, role: AccountRole): boolean {
   return isRaidEditable(raid) && isRaidMine(raid, userId, role);
+}
+
+/**
+ * 삭제 버튼 노출 조건 — 0009 delete_raid 규칙에 화면 정책 하나를 더 얹은 것.
+ *
+ * 서버는 확정 건도 지울 수 있게 열어 두지만, 확정은 이미 디스코드로 영수증이 나간
+ * 회계 기록이라 화면에서는 임시저장 건만 지울 수 있게 한다.
+ *
+ * 소유권은 수정(isRaidMine)보다 엄격하다. createdBy 가 null 인 0009 이전 건은
+ * 주인을 알 수 없는데 삭제는 되돌릴 수 없어서, 관리자만 지울 수 있다.
+ */
+export function canDeleteRaid(raid: RaidRow, userId: string | null, role: AccountRole): boolean {
+  if (raid.status !== 'draft') return false;
+  if (role !== 'MEMBER') return true;
+  return raid.createdBy !== null && raid.createdBy === userId;
+}
+
+/** 레이드 삭제 — 하위 행(드랍·지출·참여자)은 on delete cascade 로 같이 지워진다 */
+export async function deleteRaid(raidId: string): Promise<void> {
+  const { error } = await supabase.rpc('delete_raid', { p_raid_id: raidId });
+  if (error) throw new Error(error.message);
 }
 
 export async function getRaidDetail(raidId: string): Promise<RaidDetail | null> {
@@ -589,6 +620,21 @@ export interface RaidInput {
  * 1) FE 에서 정산 재계산 → save_raid RPC (SECURITY DEFINER) 로 트랜잭션 저장
  * 2) status='confirmed' 이면 confirm_settlement RPC → 디스코드 발송
  */
+/** save_raid 가 확정된 레이드를 거부할 때의 메시지 (0005 이후 문구 고정) */
+const CONFIRMED_RAID_MESSAGE = 'confirmed raid cannot be modified';
+
+/**
+ * 이미 확정된 레이드라 저장이 거부됐는지.
+ *
+ * 편집 화면이 열린 채로 레이드가 확정되면 자동저장이 계속 같은 400 을 맞는다.
+ * 호출부가 이걸 보고 자동저장을 아예 멈춰야 한다 — 재시도해도 영원히 성공하지 않는다.
+ * P0001 은 save_raid 의 RAISE EXCEPTION 네 개가 공유하므로 코드로는 구분할 수 없고,
+ * 메시지가 유일한 판별 수단이다.
+ */
+export function isConfirmedRaidError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes(CONFIRMED_RAID_MESSAGE);
+}
+
 export async function saveRaid(guildId: string, input: RaidInput): Promise<RaidRow> {
   // ── 1) 패널티 타입 조회 (스냅샷용) ──
   const penaltyTypeIds = new Set(input.participants.flatMap((p) => p.penaltyTypeIds));
