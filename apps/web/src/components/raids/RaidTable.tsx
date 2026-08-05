@@ -1,8 +1,10 @@
 import { Pencil, Lock } from 'lucide-react';
 import type { RaidRow } from '@/lib/api';
-import { isRaidEditable } from '@/lib/api';
+import { isRaidEditable, isRaidMine } from '@/lib/api';
 import { Badge } from '@/components/ui/Badge';
 import { formatDate, formatMeso } from '@/lib/format';
+import { useAuthStore } from '@/stores/useAuthStore';
+import { useCurrentGuild } from '@/stores/useGuildStore';
 
 interface RaidTableProps {
   rows: RaidRow[];
@@ -13,14 +15,19 @@ interface RaidTableProps {
 
 /** 레이드 이력 테이블 — 대시보드(최근) / 레이드 페이지(전체) 공용 */
 export function RaidTable({ rows, emptyText = '레이드 내역이 없습니다.', onEdit }: RaidTableProps) {
-  const colCount = onEdit ? 8 : 7;
+  // 소유권 판정용. 서버(save_raid/delete_raid)가 같은 규칙을 다시 검사하므로 여기선
+  // 버튼을 잠그고 이유를 보여주는 역할만 한다.
+  const userId = useAuthStore((s) => s.user?.id ?? null);
+  const { myRole } = useCurrentGuild();
+  const colCount = onEdit ? 9 : 8;
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-sm">
+      <table className="w-full min-w-[720px] text-sm">
         <thead>
           <tr className="border-border-subtle text-text-tertiary border-b text-xs">
             <th className="px-4 py-2.5 text-left font-medium">날짜</th>
             <th className="px-4 py-2.5 text-left font-medium">보스</th>
+            <th className="px-4 py-2.5 text-left font-medium">작성자</th>
             <th className="px-4 py-2.5 text-right font-medium">총 순수익</th>
             <th className="px-4 py-2.5 text-right font-medium">참여</th>
             <th className="px-4 py-2.5 text-right font-medium">1인당</th>
@@ -46,6 +53,7 @@ export function RaidTable({ rows, emptyText = '레이드 내역이 없습니다.
                 >
                   <td className="text-text-secondary px-4 py-3 tabular-nums">{formatDate(r.date)}</td>
                   <td className="text-text-primary px-4 py-3 font-medium">{r.bossName}</td>
+                  <td className="text-text-secondary px-4 py-3">{r.createdByName ?? '—'}</td>
                   <td className="text-text-primary px-4 py-3 text-right tabular-nums">
                     {isDraft ? '—' : formatMeso(r.netProfit)}
                   </td>
@@ -63,7 +71,7 @@ export function RaidTable({ rows, emptyText = '레이드 내역이 없습니다.
                   </td>
                   {onEdit && (
                     <td className="px-4 py-3 text-center">
-                      {isRaidEditable(r) ? (
+                      {isRaidEditable(r) && isRaidMine(r, userId, myRole) ? (
                         <button
                           aria-label="수정"
                           className="text-text-secondary hover:bg-bg-hover hover:text-brand-600 rounded-md p-1.5"
@@ -75,7 +83,11 @@ export function RaidTable({ rows, emptyText = '레이드 내역이 없습니다.
                       ) : (
                         <span
                           className="text-text-muted inline-flex p-1.5"
-                          title="발송 완료 — 읽기전용"
+                          title={
+                            isRaidEditable(r)
+                              ? `${r.createdByName ?? '다른 공대원'} 님이 만든 정산 — 작성자만 수정할 수 있습니다`
+                              : '발송 완료 — 읽기전용'
+                          }
                         >
                           <Lock className="h-4 w-4" />
                         </span>

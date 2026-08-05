@@ -7,11 +7,17 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { supabase } from '@/lib/supabase';
+import type { AccountRole } from '@/lib/api';
 
 export interface Guild {
   id: string;
   serverName: string;
   guildName: string;
+  /**
+   * 이 길드에서 내 계정 권한. 정산 수정·삭제 가능 여부를 화면에서 판단하는 데 쓴다.
+   * 서버(save_raid/delete_raid)가 같은 규칙을 다시 검사하므로 이건 표시용이다.
+   */
+  myRole: AccountRole;
 }
 
 interface GuildState {
@@ -43,7 +49,7 @@ export const useGuildStore = create<GuildState>()(
       loadGuilds: async () => {
         const { data: accounts, error } = await supabase
           .from('guild_accounts')
-          .select('guild_id, guilds(id, server_name, guild_name)');
+          .select('guild_id, role, guilds(id, server_name, guild_name)');
 
         // 조회 실패 시 loaded 를 올리지 않는다 — "길드 0개"로 오판해
         // 온보딩으로 튕기거나 빈 guild_id 로 쿼리하는 걸 막기 위함.
@@ -61,6 +67,7 @@ export const useGuildStore = create<GuildState>()(
               id: g.id,
               serverName: g.server_name,
               guildName: g.guild_name,
+              myRole: (a.role ?? 'MEMBER') as AccountRole,
             };
           })
           .filter((g): g is Guild => g !== null);
@@ -90,6 +97,8 @@ export const useGuildStore = create<GuildState>()(
           id: data.id,
           serverName: data.server_name,
           guildName: data.guild_name,
+          // create_guild RPC 가 호출자를 OWNER 로 넣는다.
+          myRole: 'OWNER',
         };
         set((s) => ({ guilds: [...s.guilds, guild], currentGuildId: guild.id, loaded: true }));
         return guild;
@@ -113,7 +122,7 @@ export const useGuildStore = create<GuildState>()(
   ),
 );
 
-const EMPTY_GUILD: Guild = { id: '', serverName: '', guildName: '' };
+const EMPTY_GUILD: Guild = { id: '', serverName: '', guildName: '', myRole: 'MEMBER' };
 
 export const useCurrentGuild = (): Guild =>
   useGuildStore((s) => s.guilds.find((g) => g.id === s.currentGuildId) ?? s.guilds[0] ?? EMPTY_GUILD);

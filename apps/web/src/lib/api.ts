@@ -29,6 +29,10 @@ export interface RaidRow {
   perPerson: number;
   status: RaidStatus;
   sent: boolean;
+  /** 작성자 계정 id. 0009 이전 레이드는 null(주인 없음) */
+  createdBy: string | null;
+  /** 작성 시점 이름 스냅샷 — 계정이 삭제돼도 남는다 */
+  createdByName: string | null;
 }
 
 export interface DashboardStats {
@@ -42,7 +46,7 @@ export async function getRaids(guildId: string): Promise<RaidRow[]> {
   const { data, error } = await supabase
     .from('raids')
     .select(
-      'id, date, boss_name, party_name, net_profit, participant_count, per_person, status, sent',
+      'id, date, boss_name, party_name, net_profit, participant_count, per_person, status, sent, created_by, created_by_name',
     )
     .eq('guild_id', guildId)
     .order('date', { ascending: false });
@@ -57,6 +61,8 @@ export async function getRaids(guildId: string): Promise<RaidRow[]> {
     perPerson: r.per_person,
     status: r.status.toLowerCase() as RaidStatus,
     sent: r.sent,
+    createdBy: r.created_by,
+    createdByName: r.created_by_name,
   }));
 }
 
@@ -64,7 +70,7 @@ export async function getRaid(guildId: string, raidId: string): Promise<RaidRow 
   const { data, error } = await supabase
     .from('raids')
     .select(
-      'id, date, boss_name, party_name, net_profit, participant_count, per_person, status, sent',
+      'id, date, boss_name, party_name, net_profit, participant_count, per_person, status, sent, created_by, created_by_name',
     )
     .eq('guild_id', guildId)
     .eq('id', raidId)
@@ -81,6 +87,8 @@ export async function getRaid(guildId: string, raidId: string): Promise<RaidRow 
     perPerson: data.per_person,
     status: data.status.toLowerCase() as RaidStatus,
     sent: data.sent,
+    createdBy: data.created_by,
+    createdByName: data.created_by_name,
   };
 }
 
@@ -94,7 +102,7 @@ export async function getDashboardStats(guildId: string): Promise<DashboardStats
     .filter((r) => r.date.startsWith(latestMonth))
     .reduce((sum, r) => sum + r.netProfit, 0);
 
-  // topContributor: 참여 횟수가 가장 많은 길드원
+  // topContributor: 참여 횟수가 가장 많은 공대원
   let topContributor: DashboardStats['topContributor'] = null;
   try {
     const stats = await getMemberStats(guildId);
@@ -114,13 +122,13 @@ export async function getDashboardStats(guildId: string): Promise<DashboardStats
   };
 }
 
-// ─── 길드원 ─────────────────────────────────────────────────
+// ─── 공대원 ─────────────────────────────────────────────────
 export type MemberRole = 'MASTER' | 'MANAGER' | 'MEMBER';
 
 export const ROLE_LABEL: Record<MemberRole, string> = {
   MASTER: '마스터',
   MANAGER: '부마스터',
-  MEMBER: '길드원',
+  MEMBER: '공대원',
 };
 
 export interface Member {
@@ -277,7 +285,7 @@ export async function deactivateMember(
 ): Promise<DeactivateResult> {
   const members = await getMembers(guildId, true);
   const member = members.find((m) => m.id === memberId);
-  if (!member) throw new Error('길드원을 찾을 수 없습니다.');
+  if (!member) throw new Error('공대원을 찾을 수 없습니다.');
   if (!member.isActive) throw new Error('이미 비활성 상태입니다.');
   if (member.role === 'MASTER' && masterCount(members) <= 1) {
     throw new Error(
@@ -457,6 +465,8 @@ export interface RaidParticipant {
   /** 이 참여자에게 붙은 역할 지원금 유형 (여러 개 가능, 금액은 합산) */
   subsidyTypeIds: string[];
   exitPhase: number | null;
+  /** 공대장 — 인센티브를 받는 사람. 공대당 한 명 */
+  isLeader?: boolean;
 }
 
 export type RemainderPolicy = 'leader' | 'fund' | 'first';
@@ -482,6 +492,24 @@ export interface RaidDetail {
 
 export function isRaidEditable(raid: RaidRow): boolean {
   return raid.status === 'draft' || !raid.sent;
+}
+
+/**
+ * 정산 소유권 — 0009 save_raid/delete_raid 의 규칙과 같은 판정.
+ * 서버가 다시 검사하므로 이건 버튼을 잠그고 이유를 보여주기 위한 것이다.
+ *
+ * 작성자 본인 또는 관리자만 수정할 수 있다. createdBy 가 null 인 건 0009 이전에
+ * 만들어진 레이드로, 주인을 알 수 없어 종전처럼 공대원 누구나 손댈 수 있게 둔다.
+ */
+export function isRaidMine(raid: RaidRow, userId: string | null, role: AccountRole): boolean {
+  if (raid.createdBy === null) return true;
+  if (role !== 'MEMBER') return true;
+  return raid.createdBy === userId;
+}
+
+/** 수정 버튼 노출 조건 — 상태(확정·발송)와 소유권을 모두 만족해야 한다 */
+export function canEditRaid(raid: RaidRow, userId: string | null, role: AccountRole): boolean {
+  return isRaidEditable(raid) && isRaidMine(raid, userId, role);
 }
 
 export async function getRaidDetail(raidId: string): Promise<RaidDetail | null> {
@@ -535,6 +563,7 @@ export async function getRaidDetail(raidId: string): Promise<RaidDetail | null> 
         .map((ps) => ps.subsidy_type_id)
         .filter((id): id is string => id !== null),
       exitPhase: p.exit_phase,
+      isLeader: p.is_leader ?? false,
     })),
   };
 }
@@ -590,17 +619,22 @@ export async function saveRaid(guildId: string, input: RaidInput): Promise<RaidR
   // 패널티와 같은 이유로 실패·누락 시 반드시 중단한다. 지원금이 빠진 채 계산되면
   // n빵 대상액이 커져 전원의 분배금이 틀린 영수증이 조용히 발송된다.
   const subsidyTypeIds = new Set(input.participants.flatMap((p) => p.subsidyTypeIds));
-  const subsidyTypeMap: Map<string, { name: string; amount: number }> = new Map();
+  // penaltyTypeMap 과 같은 규칙 — DB 원본(대문자)을 그대로 담고 쓰는 쪽에서 변환한다
+  const subsidyTypeMap: Map<string, { name: string; calc_type: string; amount: number }> = new Map();
 
   if (subsidyTypeIds.size > 0) {
     const { data: stRows, error: stError } = await supabase
       .from('subsidy_types')
-      .select('id, name, amount')
+      .select('id, name, calc_type, amount')
       .in('id', [...subsidyTypeIds]);
     throwIfError(stError);
 
     for (const st of stRows ?? []) {
-      subsidyTypeMap.set(st.id, { name: st.name, amount: st.amount });
+      subsidyTypeMap.set(st.id, {
+        name: st.name,
+        calc_type: st.calc_type,
+        amount: st.amount,
+      });
     }
 
     const missing = [...subsidyTypeIds].filter((id) => !subsidyTypeMap.has(id));
@@ -626,9 +660,14 @@ export async function saveRaid(guildId: string, input: RaidInput): Promise<RaidR
           value: pt.value,
         })),
       subsidies: p.subsidyTypeIds
-        .map((id) => subsidyTypeMap.get(id)?.amount)
-        .filter((amount): amount is number => amount != null),
+        .map((id) => subsidyTypeMap.get(id))
+        .filter((st): st is NonNullable<typeof st> => st != null)
+        .map((st) => ({
+          calcType: st.calc_type.toLowerCase() as 'percent' | 'fixed',
+          value: st.amount,
+        })),
       exitPhase: p.exitPhase,
+      isLeader: p.isLeader ?? false,
     })),
     ppojiRate: (input.ppojiPct || 0) / 100,
   });
@@ -671,6 +710,9 @@ export async function saveRaid(guildId: string, input: RaidInput): Promise<RaidR
         subsidy: sr?.subsidy ?? 0,
         penalty: sr?.penalty ?? 0,
         redistributed: sr?.redistributed ?? 0,
+        incentive: sr?.incentive ?? 0,
+        leftover_share: sr?.leftoverShare ?? 0,
+        is_leader: p.isLeader ?? false,
         final_amount: sr?.final ?? 0,
         forfeited: sr?.forfeited ?? false,
         penalties: p.penaltyTypeIds
@@ -691,7 +733,19 @@ export async function saveRaid(guildId: string, input: RaidInput): Promise<RaidR
           .map((stId) => {
             const st = subsidyTypeMap.get(stId);
             if (!st) return null;
-            return { subsidy_type_id: stId, name: st.name, amount: st.amount };
+            // amount 는 "이번 레이드에서 실제 계산된 메소", value 는 "그때의 규칙 값".
+            // percent 는 settlement.ts 와 같은 식(순수익 기준)으로 다시 계산한다.
+            const amount =
+              st.calc_type === 'PERCENT'
+                ? Math.floor((Math.max(0, settlement.netProfit) * st.amount) / 100)
+                : st.amount;
+            return {
+              subsidy_type_id: stId,
+              name: st.name,
+              amount,
+              calc_type: st.calc_type,
+              value: st.amount,
+            };
           })
           .filter((r): r is NonNullable<typeof r> => r != null),
       };
@@ -1054,7 +1108,9 @@ export interface SubsidyType {
   name: string;
   /** 자동 프리필 대상 직업. null = 직업 무관(수동으로만 붙임 — 용병 등) */
   job: string | null;
-  /** 메소 정액 */
+  /** PERCENT: 순수익의 %, FIXED: 메소 정액 */
+  calcType: PenaltyCalcType;
+  /** calcType 이 PERCENT 면 0~100, FIXED 면 메소 절대액 */
   amount: number;
 }
 
@@ -1070,6 +1126,7 @@ export async function getSubsidyTypes(guildId: string): Promise<SubsidyType[]> {
     guildId: s.guild_id,
     name: s.name,
     job: s.job,
+    calcType: s.calc_type.toLowerCase() as PenaltyCalcType,
     amount: s.amount,
   }));
 }
@@ -1077,6 +1134,7 @@ export async function getSubsidyTypes(guildId: string): Promise<SubsidyType[]> {
 export interface SubsidyTypeInput {
   name: string;
   job: string | null;
+  calcType: PenaltyCalcType;
   amount: number;
 }
 
@@ -1086,11 +1144,23 @@ export async function addSubsidyType(
 ): Promise<SubsidyType> {
   const name = input.name.trim();
   if (!name) throw new Error('지원금명을 입력해 주세요.');
-  if (input.amount <= 0) throw new Error('지원금은 1 메소 이상이어야 합니다.');
+  if (input.calcType === 'percent') {
+    if (input.amount <= 0 || input.amount > 100) {
+      throw new Error('지원금 비율은 1~100% 사이여야 합니다.');
+    }
+  } else if (input.amount <= 0) {
+    throw new Error('지원금은 1 메소 이상이어야 합니다.');
+  }
 
   const { data, error } = await supabase
     .from('subsidy_types')
-    .insert({ guild_id: guildId, name, job: input.job, amount: input.amount })
+    .insert({
+      guild_id: guildId,
+      name,
+      job: input.job,
+      calc_type: input.calcType.toUpperCase() as 'PERCENT' | 'FIXED',
+      amount: input.amount,
+    })
     .select()
     .single();
 
@@ -1104,6 +1174,7 @@ export async function addSubsidyType(
     guildId: data.guild_id,
     name: data.name,
     job: data.job,
+    calcType: data.calc_type.toLowerCase() as PenaltyCalcType,
     amount: data.amount,
   };
 }

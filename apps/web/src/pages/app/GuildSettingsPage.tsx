@@ -56,7 +56,7 @@ export function GuildSettingsPage() {
     <div>
       <PageHeader
         title="길드 설정"
-        description="기본 정보·디스코드·정산/패널티 정책·길드원 권한·초대·변경 이력"
+        description="기본 정보·디스코드·정산/패널티 정책·공대원 권한·초대·변경 이력"
       />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <BasicInfoCard />
@@ -65,7 +65,7 @@ export function GuildSettingsPage() {
         <Card className="space-y-4 p-5 lg:col-span-2">
           <h2 className="text-card-title">정산 정책</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="기본 뽀찌율" value="0%" hint="공대장 몫 · 레이드마다 바꿀 수 있습니다" />
+            <Field label="기본 인센티브율" value="0%" hint="공대장 몫 · 레이드마다 바꿀 수 있습니다" />
             <Field
               label="기본 판매 수수료율"
               value="5%"
@@ -73,7 +73,7 @@ export function GuildSettingsPage() {
             />
           </div>
           <p className="text-text-tertiary text-xs">
-            ※ 잔돈 처리는 공대별로 설정합니다. (공대 구성 화면)
+            ※ 나눠떨어지지 않고 남는 돈은 참여자에게 다시 n빵됩니다.
           </p>
         </Card>
 
@@ -232,7 +232,7 @@ function AccountRoleCard() {
         <span className="text-text-tertiary text-xs">구글 로그인 계정 대상 · 관리자 최소 1명</span>
       </div>
       <p className="text-text-tertiary text-xs leading-relaxed">
-        길드원(정산 명단)과 별개로, 서비스에 로그인해 길드에 참여한 계정의 권한을 관리합니다.
+        공대원(정산 명단)과 별개로, 서비스에 로그인해 길드에 참여한 계정의 권한을 관리합니다.
       </p>
       {isLoading ? (
         <div className="py-6">
@@ -290,10 +290,10 @@ function AccountRoleCard() {
 
 const INVITE_ROLES: { value: AccountRole; label: string }[] = [
   { value: 'ADMIN', label: '부마스터' },
-  { value: 'MEMBER', label: '길드원' },
+  { value: 'MEMBER', label: '공대원' },
 ];
 
-/** 길드원 초대 — 초대 코드 생성 후 복사해 공유 */
+/** 공대원 초대 — 초대 코드 생성 후 복사해 공유 */
 function InviteCard() {
   const guild = useCurrentGuild();
   const queryClient = useQueryClient();
@@ -320,7 +320,7 @@ function InviteCard() {
 
   return (
     <Card className="space-y-3 p-5 lg:col-span-2">
-      <h2 className="text-card-title">길드원 초대</h2>
+      <h2 className="text-card-title">공대원 초대</h2>
       <p className="text-text-tertiary text-xs leading-relaxed">
         초대 코드를 생성해 부길마·공대장에게 공유하세요. 받은 사람이 온보딩에서 코드를 입력하면 이
         길드({guild.guildName})에 참여합니다.
@@ -474,6 +474,7 @@ function SubsidyPolicyCard() {
   const [name, setName] = useState('');
   /** 빈 문자열 = 직업 무관(수동 전용). DB 에는 null 로 들어간다 */
   const [job, setJob] = useState('');
+  const [calcType, setCalcType] = useState<PenaltyCalcType>('fixed');
   const [amount, setAmount] = useState(1000000);
 
   const { data: types, isLoading } = useQuery({
@@ -487,7 +488,7 @@ function SubsidyPolicyCard() {
   };
 
   const addMutation = useMutation({
-    mutationFn: () => addSubsidyType(guild.id, { name, job: job || null, amount }),
+    mutationFn: () => addSubsidyType(guild.id, { name, job: job || null, calcType, amount }),
     onSuccess: () => {
       toast.success('지원금이 추가되었습니다.');
       setName('');
@@ -512,9 +513,9 @@ function SubsidyPolicyCard() {
       </div>
 
       <p className="text-text-tertiary text-xs leading-relaxed">
-        공대장 뽀찌를 뗀 <b className="text-text-secondary">뒤</b>에 분배 대상액에서 차감하므로
+        공대장 인센티브를 뗀 <b className="text-text-secondary">뒤</b>에 분배 대상액에서 차감하므로
         공대장 몫은 줄지 않고 공대원 전원이 1/N씩 부담합니다. 대상 직업을 지정하면 레이드 화면에서
-        해당 직업 길드원에게 자동으로 켜지고, 안 줄 날은 칩을 눌러 끄면 됩니다. 직업을{' '}
+        해당 직업 공대원에게 자동으로 켜지고, 안 줄 날은 칩을 눌러 끄면 됩니다. 직업을{' '}
         <b className="text-text-secondary">직업 무관</b>으로 두면 용병 등에게 수동으로만 붙습니다.
       </p>
 
@@ -530,7 +531,9 @@ function SubsidyPolicyCard() {
                 <span className="text-text-primary text-sm font-medium">{t.name}</span>
                 <Badge tone={t.job ? 'success' : 'neutral'}>{t.job ?? '직업 무관'}</Badge>
                 <span className="text-text-secondary text-sm tabular-nums">
-                  +{formatMeso(t.amount)} 메소
+                  {t.calcType === 'percent'
+                    ? `+순수익의 ${t.amount}%`
+                    : `+${formatMeso(t.amount)} 메소`}
                 </span>
               </div>
               <button
@@ -573,15 +576,34 @@ function SubsidyPolicyCard() {
           </Select>
         </div>
         <div>
-          <label className="text-text-secondary mb-1 block text-xs font-medium">금액 (메소)</label>
+          <label className="text-text-secondary mb-1 block text-xs font-medium">계산 방식</label>
+          <Select
+            className="w-40"
+            value={calcType}
+            onChange={(e) => {
+              const next = e.target.value as PenaltyCalcType;
+              setCalcType(next);
+              // 단위가 바뀌므로 기본값도 같이 바꾼다 (100만% 같은 값이 남지 않도록)
+              setAmount(next === 'percent' ? 5 : 1000000);
+            }}
+          >
+            <option value="fixed">정액 (메소)</option>
+            <option value="percent">비율 (순수익 %)</option>
+          </Select>
+        </div>
+        <div>
+          <label className="text-text-secondary mb-1 block text-xs font-medium">
+            {calcType === 'percent' ? '비율 (%)' : '금액 (메소)'}
+          </label>
           <Input
             className="w-36"
             type="number"
             min={0}
-            step={100000}
+            max={calcType === 'percent' ? 100 : undefined}
+            step={calcType === 'percent' ? 1 : 100000}
             value={amount}
             onChange={(e) => setAmount(Number(e.target.value) || 0)}
-            placeholder="1000000"
+            placeholder={calcType === 'percent' ? '5' : '1000000'}
           />
         </div>
         <Button

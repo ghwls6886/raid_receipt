@@ -13,6 +13,7 @@ import {
   HelpCircle,
 } from 'lucide-react';
 import { useCurrentGuild } from '@/stores/useGuildStore';
+import { useAuthStore } from '@/stores/useAuthStore';
 import {
   getBosses,
   getMembers,
@@ -25,11 +26,10 @@ import {
   getRaid,
   saveRaid,
   isRaidEditable,
+  isRaidMine,
   groupMembersByJob,
   DEFAULT_PHASE_COUNT,
   MAX_PHASE_COUNT,
-  REMAINDER_POLICY_LABEL,
-  REMAINDER_POLICIES,
   type ExpenseCategory,
   type RaidStatus,
   type RaidInput,
@@ -52,7 +52,7 @@ import { toast } from '@/stores/useToastStore';
 import { confirm } from '@/stores/useConfirmStore';
 import { cn } from '@/lib/cn';
 
-/** 이번 레이드에만 참여하는 임시 용병 — 길드원 명단에 남지 않고 n빵에 참여한다 */
+/** 이번 레이드에만 참여하는 임시 용병 — 공대원 명단에 남지 않고 n빵에 참여한다 */
 interface GuestRow {
   id: string;
   name: string;
@@ -72,7 +72,7 @@ interface ExpenseRow {
   cost: number;
 }
 
-/** 정산 테이블 한 줄 — 길드원과 임시 용병을 같은 모양으로 다룬다 */
+/** 정산 테이블 한 줄 — 공대원과 임시 용병을 같은 모양으로 다룬다 */
 interface ParticipantRow {
   id: string;
   name: string;
@@ -84,7 +84,7 @@ let localSeq = 0;
 const localId = (): string => `local_${(localSeq += 1)}`;
 
 let guestSeq = 0;
-/** 길드원 id(`m1`…)와 절대 겹치지 않도록 prefix 를 분리 */
+/** 공대원 id(`m1`…)와 절대 겹치지 않도록 prefix 를 분리 */
 const guestId = (): string => `guest_${(guestSeq += 1)}`;
 
 const CATEGORY_DOT: Record<string, string> = {
@@ -137,6 +137,7 @@ export function RaidNewPage() {
   const { id: routeId } = useParams();
   const isEdit = Boolean(routeId);
   const guild = useCurrentGuild();
+  const userId = useAuthStore((s) => s.user?.id ?? null);
   const queryClient = useQueryClient();
 
   const bossesQuery = useQuery({ queryKey: ['bosses'], queryFn: getBosses });
@@ -173,7 +174,7 @@ export function RaidNewPage() {
   });
 
   const [bossName, setBossName] = useState('');
-  // 뽀찌를 안 걷는 길드가 많아 0 에서 시작한다 (길드 설정 기본값이 로드되면 덮어씀)
+  // 인센티브를 안 걷는 길드가 많아 0 에서 시작한다 (길드 설정 기본값이 로드되면 덮어씀)
   const [ppojiPct, setPpojiPct] = useState(0);
   const [ppojiTouched, setPpojiTouched] = useState(false);
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
@@ -197,9 +198,16 @@ export function RaidNewPage() {
   ]);
   const [remainderPolicy, setRemainderPolicy] = useState<RemainderPolicy>('fund');
   const [loadedPartyName, setLoadedPartyName] = useState<string | null>(null);
+  /**
+   * 인센티브를 받을 공대장 (참여자 행 id). 공대를 불러오면 그 공대의 공대장이 자동으로 잡힌다.
+   * 지정되지 않으면 인센티브를 아예 떼지 않는다 — settlement.ts 참고.
+   */
+  const [leaderRowId, setLeaderRowId] = useState<string | null>(null);
   const [draftId, setDraftId] = useState<string | undefined>(undefined);
   const [wasConfirmed, setWasConfirmed] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  // 자동저장이 조용히 실패하면 사용자는 "임시저장이 안 된다" 고만 느낀다. 헤더에 표시한다.
+  const [autosaveFailed, setAutosaveFailed] = useState(false);
   const [pending, setPending] = useState(false);
   /** ③ 참여자별 정산 카드에서 여는 팝업들 (규칙 설명 · 정책 유형 즉석 추가) */
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -209,7 +217,7 @@ export function RaidNewPage() {
 
   const defaultFeePct = settingsQuery.data?.defaultFeePct ?? 0;
 
-  // 길드 기본 뽀찌율 (신규 · 미변경 시)
+  // 길드 기본 인센티브율 (신규 · 미변경 시)
   useEffect(() => {
     if (!isEdit && !ppojiTouched && settingsQuery.data) {
       setPpojiPct(Math.round(settingsQuery.data.ppojiRate * 100));
@@ -237,9 +245,16 @@ export function RaidNewPage() {
       navigate('/raids');
       return;
     }
+    // 목록에서 버튼을 잠가 두지만 주소로 직접 들어올 수 있어 여기서도 막는다.
+    // 서버(save_raid)가 최종 판정을 하므로 이건 헛수고를 줄이기 위한 안내다.
+    if (!isRaidMine(row, userId, guild.myRole)) {
+      toast.error(`${row.createdByName ?? '다른 공대원'} 님이 만든 정산은 수정할 수 없습니다.`);
+      navigate('/raids');
+      return;
+    }
     setDraftId(row.id);
     setWasConfirmed(row.status === 'confirmed');
-  }, [isEdit, rowQuery.data, navigate]);
+  }, [isEdit, rowQuery.data, navigate, userId, guild.myRole]);
 
   // 편집 진입: 상세로 폼 복원 (1회)
   useEffect(() => {
@@ -268,12 +283,13 @@ export function RaidNewPage() {
         : [{ id: localId(), name: '', salePrice: 0, feePct: 0 }],
     );
 
-    // 길드원/임시 용병을 갈라 담고, 패널티·이탈 페이즈는 각자의 key 로 다시 건다
+    // 공대원/임시 용병을 갈라 담고, 패널티·이탈 페이즈는 각자의 key 로 다시 건다
     const memberIds: string[] = [];
     const restoredGuests: GuestRow[] = [];
     const penaltyEntries: Array<[string, string[]]> = [];
     const subsidyEntries: Array<[string, string[]]> = [];
     const exitEntries: Array<[string, number]> = [];
+    let restoredLeader: string | null = null;
     for (const p of d.participants) {
       let key: string;
       if (p.memberId) {
@@ -284,6 +300,7 @@ export function RaidNewPage() {
         restoredGuests.push(g);
         key = g.id;
       }
+      if (p.isLeader) restoredLeader = key;
       if (p.penaltyTypeIds.length > 0) penaltyEntries.push([key, [...p.penaltyTypeIds]]);
       if (p.subsidyTypeIds.length > 0) subsidyEntries.push([key, [...p.subsidyTypeIds]]);
       if (p.exitPhase != null) exitEntries.push([key, p.exitPhase]);
@@ -295,6 +312,7 @@ export function RaidNewPage() {
     setPenaltyBy(Object.fromEntries(penaltyEntries));
     setSubsidyBy(Object.fromEntries(subsidyEntries));
     setExitPhaseBy(Object.fromEntries(exitEntries));
+    setLeaderRowId(restoredLeader);
   }, [isEdit, detailQuery.data]);
 
   const members = membersQuery.data ?? [];
@@ -304,7 +322,7 @@ export function RaidNewPage() {
   const subsidyById = useMemo(() => new Map(subsidyTypes.map((s) => [s.id, s])), [subsidyTypes]);
 
   /**
-   * 직업이 맞는 길드원에게 지원금 칩을 자동으로 켠다. 손대지 않은 참여자만 대상이라
+   * 직업이 맞는 공대원에게 지원금 칩을 자동으로 켠다. 손대지 않은 참여자만 대상이라
    * 사용자가 끈 칩은 그대로 꺼진 채 남는다. 용병은 직업 정보가 없어 수동 전용.
    */
   useEffect(() => {
@@ -325,7 +343,7 @@ export function RaidNewPage() {
     });
   }, [members, selected, subsidyTypes]);
 
-  /** 길드원 → 임시 용병 순. 정산 테이블과 계산 입력이 이 순서를 공유한다 */
+  /** 공대원 → 임시 용병 순. 정산 테이블과 계산 입력이 이 순서를 공유한다 */
   const participantRows = useMemo<ParticipantRow[]>(
     () => [
       ...members
@@ -354,12 +372,22 @@ export function RaidNewPage() {
           }),
           subsidies: (subsidyBy[row.id] ?? []).flatMap((typeId) => {
             const st = subsidyById.get(typeId);
-            return st ? [st.amount] : [];
+            return st ? [{ calcType: st.calcType, value: st.amount }] : [];
           }),
           exitPhase: raw == null ? null : Math.min(raw, phaseCount),
+          isLeader: row.id === leaderRowId,
         };
       }),
-    [participantRows, penaltyBy, penaltyById, subsidyBy, subsidyById, exitPhaseBy, phaseCount],
+    [
+      participantRows,
+      penaltyBy,
+      penaltyById,
+      subsidyBy,
+      subsidyById,
+      exitPhaseBy,
+      phaseCount,
+      leaderRowId,
+    ],
   );
 
   const expenseTotal = useMemo(() => expenses.reduce((s, e) => s + (e.cost || 0), 0), [expenses]);
@@ -406,6 +434,7 @@ export function RaidNewPage() {
       penaltyTypeIds: penaltyBy[row.id] ?? [],
       subsidyTypeIds: subsidyBy[row.id] ?? [],
       exitPhase: exitPhaseBy[row.id] ?? null,
+      isLeader: row.id === leaderRowId,
     })),
     netProfit: result.netProfit,
     participantCount: result.participantCount,
@@ -423,9 +452,11 @@ export function RaidNewPage() {
           const row = await saveRaid(guild.id, buildInput('draft', draftId));
           setDraftId(row.id);
           setLastSavedAt(new Date().toLocaleTimeString('ko-KR'));
+          setAutosaveFailed(false);
           void queryClient.invalidateQueries({ queryKey: ['raids', guild.id] });
         } catch {
-          /* 자동저장 실패는 조용히 무시 */
+          // 토스트로 반복해 띄우면 입력 중 방해가 되므로 헤더 표시로만 알린다.
+          setAutosaveFailed(true);
         }
       })();
     }, AUTOSAVE_MS);
@@ -578,6 +609,7 @@ export function RaidNewPage() {
     setSubsidyBy({});
     subsidyTouchedRef.current.clear();
     setExitPhaseBy({});
+    setLeaderRowId(null);
     setLoadedPartyName(last.partyName);
     setDrops([{ id: localId(), name: '', salePrice: 0, feePct: defaultFeePct }]);
     setPhaseCount(DEFAULT_PHASE_COUNT);
@@ -595,6 +627,8 @@ export function RaidNewPage() {
     setExitPhaseBy({});
     setRemainderPolicy(party.remainderPolicy);
     setLoadedPartyName(party.name);
+    // 공대에 지정된 공대장을 인센티브 수령자로 잡는다. 명단에 없으면 비워 둔다.
+    setLeaderRowId(valid.includes(party.leaderId) ? party.leaderId : null);
     toast.success(`${party.name} 공대원 ${valid.length}명을 불러왔습니다.`);
   };
 
@@ -626,12 +660,14 @@ export function RaidNewPage() {
       await saveRaid(guild.id, buildInput(status, draftId));
       await queryClient.invalidateQueries({ queryKey: ['raids', guild.id] });
       await queryClient.invalidateQueries({ queryKey: ['dashboard-stats', guild.id] });
-      toast.success(
-        status === 'confirmed' ? '확정되었습니다. 영수증을 발송했습니다.' : '임시저장되었습니다.',
-      );
+      // 디스코드 발송은 실패해도 확정을 되돌리지 않으므로 "발송했습니다" 라고 단정하지
+      // 않는다. 실제 발송 여부는 레이드 목록의 발송/미발송 배지가 보여 준다.
+      toast.success(status === 'confirmed' ? '확정되었습니다.' : '임시저장되었습니다.');
       navigate('/raids');
-    } catch {
-      toast.error('저장에 실패했습니다.');
+    } catch (e) {
+      // 사유를 삼키면 사용자는 "안 된다" 고만 하고 원인을 좁힐 수 없다. RPC 메시지를 붙인다.
+      const detail = e instanceof Error ? e.message : '';
+      toast.error(detail ? `저장에 실패했습니다. (${detail})` : '저장에 실패했습니다.');
     } finally {
       setPending(false);
     }
@@ -661,8 +697,14 @@ export function RaidNewPage() {
           <h1 className="text-page-title">{isEdit ? '레이드 수정' : '레이드 추가'}</h1>
           <p className="text-text-secondary mt-0.5 text-sm">
             {guild.serverName} · {guild.guildName}
-            {lastSavedAt && (
-              <span className="text-text-tertiary ml-2">· 자동 임시저장 {lastSavedAt}</span>
+            {autosaveFailed ? (
+              <span className="text-error-600 ml-2">
+                · 자동 임시저장 실패 — [임시저장]을 눌러 주세요
+              </span>
+            ) : (
+              lastSavedAt && (
+                <span className="text-text-tertiary ml-2">· 자동 임시저장 {lastSavedAt}</span>
+              )
             )}
           </p>
         </div>
@@ -693,7 +735,7 @@ export function RaidNewPage() {
               </div>
               <div>
                 <label className="text-text-secondary mb-1 block text-sm font-medium">
-                  공대장 뽀찌율 (%)
+                  공대장 인센티브율 (%)
                 </label>
                 <Input
                   type="number"
@@ -706,6 +748,30 @@ export function RaidNewPage() {
                   }}
                 />
               </div>
+            </div>
+
+            {/* 인센티브를 실제로 받을 사람. 미지정이면 인센티브를 떼지 않는다. */}
+            <div className="mt-4">
+              <label className="text-text-secondary mb-1 block text-sm font-medium">
+                공대장 (인센티브 수령자)
+              </label>
+              <Select
+                value={leaderRowId ?? ''}
+                onChange={(e) => setLeaderRowId(e.target.value || null)}
+              >
+                <option value="">지정 안 함 — 인센티브를 떼지 않습니다</option>
+                {participantRows.map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.name}
+                    {row.isGuest ? ' (용병)' : ''}
+                  </option>
+                ))}
+              </Select>
+              {ppojiPct > 0 && !leaderRowId && (
+                <p className="text-warning-600 mt-1.5 text-xs">
+                  인센티브율이 {ppojiPct}% 로 설정돼 있지만 받을 사람이 없어 적용되지 않습니다.
+                </p>
+              )}
             </div>
           </Card>
 
@@ -747,7 +813,7 @@ export function RaidNewPage() {
                   onClick={() => navigate('/members')}
                   type="button"
                 >
-                  길드원
+                  공대원
                 </button>
                 을 등록해 주세요.
               </p>
@@ -805,13 +871,13 @@ export function RaidNewPage() {
               </div>
             )}
 
-            {/* 임시 용병 — 이번 레이드에만 참여하고 길드원과 똑같이 n빵 */}
+            {/* 임시 용병 — 이번 레이드에만 참여하고 공대원과 똑같이 n빵 */}
             <div className="border-border-subtle mt-2 border-t pt-3">
               <div className="mb-2 flex items-start justify-between gap-3">
                 <div>
                   <span className="text-text-secondary text-sm font-medium">임시 용병</span>
                   <p className="text-text-tertiary mt-0.5 text-xs">
-                    길드원 명단에 남지 않고 이번 레이드만 참여합니다. 분배는 길드원과 동일한 n빵.
+                    공대원 명단에 남지 않고 이번 레이드만 참여합니다. 분배는 공대원과 동일한 n빵.
                   </p>
                 </div>
                 <Button size="sm" variant="ghost" onClick={addGuest}>
@@ -1126,7 +1192,9 @@ export function RaidNewPage() {
                                 >
                                   {st.name}
                                   <span className="ml-1 opacity-70">
-                                    +{formatMesoCompact(st.amount)}
+                                    {st.calcType === 'percent'
+                                      ? `+${st.amount}%`
+                                      : `+${formatMesoCompact(st.amount)}`}
                                   </span>
                                 </button>
                               );
@@ -1181,7 +1249,7 @@ export function RaidNewPage() {
               <div className="border-border-subtle my-2 border-t" />
               <SummaryRow label="순수익" value={result.netProfit} strong />
               <SummaryRow
-                label={`− 공대장 뽀찌 (${ppojiPct}%)`}
+                label={`− 공대장 인센티브 (${ppojiPct}%)`}
                 value={-result.leaderPpoji}
                 muted
               />
@@ -1227,21 +1295,9 @@ export function RaidNewPage() {
             )}
 
             <div className="mt-3">
-              <label className="text-text-tertiary mb-1 block text-xs font-medium">잔돈 처리</label>
-              <Select
-                value={remainderPolicy}
-                onChange={(e) => setRemainderPolicy(e.target.value as RemainderPolicy)}
-              >
-                {REMAINDER_POLICIES.map((p) => (
-                  <option key={p} value={p}>
-                    {REMAINDER_POLICY_LABEL[p]}
-                  </option>
-                ))}
-              </Select>
-              <p className="text-text-tertiary mt-1.5 text-xs leading-relaxed">
-                메소 단위로 딱 나눠떨어지지 않고 남는 자투리{' '}
-                <b className="text-text-secondary">{formatMeso(result.leftover)} 메소</b>가{' '}
-                {REMAINDER_POLICY_LABEL[remainderPolicy]}(으)로 처리됩니다.
+              <p className="text-text-tertiary text-xs leading-relaxed">
+                남는 돈은 따로 빼두지 않고 <b className="text-text-secondary">참여자에게 다시 n빵</b>
+                합니다. (몰수 대상자 제외)
                 {hasPenalty && (
                   <>
                     {' '}
@@ -1255,7 +1311,7 @@ export function RaidNewPage() {
                     {' '}
                     그중{' '}
                     <b className="text-text-secondary">{formatMeso(result.orphanedPenalty)} 메소</b>
-                    는 받을 자격자가 없어(모두 같은 시점에 이탈) 잔돈으로 넘어갑니다.
+                    는 받을 자격자가 없어(모두 같은 시점에 이탈) 참여자 전원에게 되돌아갑니다.
                   </>
                 )}
                 {result.forfeitedSubsidy > 0 && (
@@ -1265,7 +1321,14 @@ export function RaidNewPage() {
                     <b className="text-text-secondary">
                       {formatMeso(result.forfeitedSubsidy)} 메소
                     </b>
-                    도 지급되지 않고 잔돈으로 넘어갑니다.
+                    도 마찬가지로 되돌아갑니다.
+                  </>
+                )}
+                {result.leftover > 0 && (
+                  <>
+                    {' '}
+                    끝전 <b className="text-text-secondary">{formatMeso(result.leftover)} 메소</b>는
+                    나눠떨어지지 않아 남습니다. (공대장을 지정하면 공대장 몫)
                   </>
                 )}
               </p>

@@ -3,8 +3,8 @@
  *
  *   실수익      = Σ(판매가 - 판매가 × 수수료%)   ← 경매장 수수료 등
  *   순수익      = 실수익 - 공대경비
- *   공대장 뽀찌  = 순수익 × 뽀찌%              (순수익이 양수일 때만)
- *   분배 대상액  = 순수익 - 뽀찌
+ *   공대장 인센티브  = 순수익 × 인센티브%              (순수익이 양수일 때만)
+ *   분배 대상액  = 순수익 - 인센티브
  *   n빵 대상액   = 분배 대상액 - 역할 지원금
  *   기본 1인당   = n빵 대상액 / 참여인원
  *
@@ -12,7 +12,7 @@
  * "쓴 돈"은 공대 경비(expenseTotal) 하나로 합쳐 순수익에서 차감한다.
  *
  * 역할 지원금(보우마스터 샤프아이즈·비숍 부활 등)은 특정 역할을 맡은 참여자에게 n빵 전에
- * 먼저 떼어주는 몫이다. 공대장 뽀찌를 뗀 **뒤**에 차감하므로 공대장 몫은 줄지 않고 공대원
+ * 먼저 떼어주는 몫이다. 공대장 인센티브를 뗀 **뒤**에 차감하므로 공대장 몫은 줄지 않고 공대원
  * 전원이 1/N 씩 부담한다. 한 사람에게 여러 개가 붙을 수 있고 금액은 합산된다.
  *
  *   - 이탈해도 지원금은 전액 지급한다. 감액이 필요하면 패널티로 건다 — 규칙을 한 곳에만 둔다.
@@ -55,14 +55,22 @@ export interface SettlementPenalty {
   value: number;
 }
 
+export interface SettlementSubsidy {
+  calcType: 'percent' | 'fixed';
+  /** percent: 0~100 (순수익 기준), fixed: 메소 절대액 */
+  value: number;
+}
+
 export interface SettlementParticipant {
   id: string;
   /** 한 사람에게 여러 개가 붙을 수 있다 (예: 2페 이탈 + 지각). 금액은 합산 */
   penalties?: SettlementPenalty[];
-  /** 역할 지원금(메소 정액). 여러 개 가능하며 합산. n빵 전에 분배 대상액에서 먼저 뗀다 */
-  subsidies?: number[];
+  /** 역할 지원금. 여러 개 가능하며 합산. n빵 전에 분배 대상액에서 먼저 뗀다 */
+  subsidies?: SettlementSubsidy[];
   /** 이탈 페이즈 (1부터). null/undefined = 완주 */
   exitPhase?: number | null;
+  /** 공대장 — 인센티브를 받는 사람. 공대당 한 명 */
+  isLeader?: boolean;
 }
 
 export interface SettlementInput {
@@ -70,7 +78,7 @@ export interface SettlementInput {
   /** 공대 경비(소모품·입장료·기타) 합계 */
   expenseTotal: number;
   participants: SettlementParticipant[];
-  /** 뽀찌율 0~1 */
+  /** 인센티브율 0~1 */
   ppojiRate: number;
 }
 
@@ -84,6 +92,10 @@ export interface ParticipantResult {
   penalty: number;
   /** 재분배로 추가 수령 */
   redistributed: number;
+  /** 공대장 인센티브 수령액 (공대장만 > 0) */
+  incentive: number;
+  /** 잔돈 재분배 수령액 — 수령자 없는 벌금·몰수 지원금·끝전을 되돌려준 몫 */
+  leftoverShare: number;
   /** 최종 수령액 */
   final: number;
   /** 몰수 대상 — 기본 몫을 전부 뺏겨 남의 벌금도 못 받는다 */
@@ -101,7 +113,7 @@ export interface SettlementResult {
   expenseTotal: number;
   netProfit: number;
   leaderPpoji: number;
-  /** 참여자에게 분배되는 총액 (순수익 - 뽀찌) */
+  /** 참여자에게 분배되는 총액 (순수익 - 인센티브) */
   distributable: number;
   /** 분배 대상액에서 뗀 역할 지원금 총액 (비례 축소 후 기준) */
   subsidyTotal: number;
@@ -223,12 +235,24 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
 
   const netProfit = totalSales - expenseTotal;
   const rate = clamp(input.ppojiRate || 0, 0, 1);
-  const leaderPpoji = netProfit > 0 ? Math.floor(netProfit * rate) : 0;
+  // 받을 사람(공대장)이 지정되지 않았으면 아예 떼지 않는다. 떼기만 하고 수령자가 없으면
+  // 그 돈이 잔돈으로 흘러 "누구 것도 아닌 금액"이 되어 영수증 설명이 안 된다.
+  const leaderIndex = input.participants.findIndex((p) => p.isLeader);
+  const hasLeader = leaderIndex >= 0;
+  const leaderPpoji = hasLeader && netProfit > 0 ? Math.floor(netProfit * rate) : 0;
   const distributable = netProfit - leaderPpoji;
 
   // 역할 지원금은 n빵 전에 분배 대상액에서 뗀다. 합계가 분배 대상액을 넘으면
   // 기본 1인당이 음수가 되므로 비례 축소한다 (전원 마이너스 수령 방지).
-  const requestedSubsidies = input.participants.map((p) => Math.max(0, sum(p.subsidies ?? [])));
+  // percent 지원금은 순수익 기준이다. 분배 대상액이나 1인당을 기준으로 잡으면
+  // "지원금을 빼야 1인당이 나오는데 1인당이 있어야 지원금이 나오는" 순환이 생긴다.
+  const subsidyAmount = (s: SettlementSubsidy): number =>
+    s.calcType === 'percent'
+      ? Math.floor((Math.max(0, netProfit) * clamp(s.value, 0, 100)) / 100)
+      : Math.max(0, s.value);
+  const requestedSubsidies = input.participants.map((p) =>
+    Math.max(0, sum((p.subsidies ?? []).map(subsidyAmount))),
+  );
   const requestedTotal = sum(requestedSubsidies);
   const subsidyCap = Math.max(0, distributable);
   const subsidyCapped = requestedTotal > subsidyCap;
@@ -257,17 +281,42 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
   const subsidyPaid = sum(paidSubsidies);
   const forfeitedSubsidy = subsidyTotal - subsidyPaid;
 
+  // 잔돈은 남기지 않고 참여자에게 되돌려준다. 원천은 네 가지 —
+  // 1인당 나눗셈 끝전, 재분배 끝전, 수령자 없는 벌금, 몰수자에게 못 준 지원금.
+  // 몰수 대상자는 제외한다. 자기 몫을 통째로 뺏긴 사람이 잔돈으로 되살아나면
+  // 몰수의 의미가 없어지고, 남의 벌금을 못 받게 한 규칙과도 어긋난다.
+  const leftoverPool = baseRemainder + remainder + orphaned + forfeitedSubsidy;
+  const leftoverTargets: number[] = [];
+  for (let i = 0; i < n; i += 1) {
+    if (!forfeited[i]) leftoverTargets.push(i);
+  }
+  const leftoverPer =
+    leftoverTargets.length > 0 ? Math.floor(leftoverPool / leftoverTargets.length) : 0;
+  const leftoverShares = new Array<number>(n).fill(0);
+  for (const i of leftoverTargets) leftoverShares[i] = leftoverPer;
+  // 여기서도 나누어떨어지지 않은 끝전(참여인원 미만의 메소)이 남는다.
+  // 공대장이 있으면 그가 가져가고, 없으면 어쩔 수 없이 leftover 로 남긴다.
+  let leftoverRest = leftoverPool - leftoverPer * leftoverTargets.length;
+  if (hasLeader && leftoverRest > 0 && !forfeited[leaderIndex]) {
+    leftoverShares[leaderIndex] = (leftoverShares[leaderIndex] ?? 0) + leftoverRest;
+    leftoverRest = 0;
+  }
+
   const participants: ParticipantResult[] = input.participants.map((p, i) => {
     const penalty = penalties[i] ?? 0;
     const gained = redistributed[i] ?? 0;
     const subsidy = paidSubsidies[i] ?? 0;
+    const incentive = i === leaderIndex ? leaderPpoji : 0;
+    const leftoverShare = leftoverShares[i] ?? 0;
     return {
       id: p.id,
       base: basePerPerson,
       subsidy,
       penalty,
       redistributed: gained,
-      final: basePerPerson + subsidy - penalty + gained,
+      incentive,
+      leftoverShare,
+      final: basePerPerson + subsidy - penalty + gained + incentive + leftoverShare,
       forfeited: forfeited[i] ?? false,
     };
   });
@@ -289,7 +338,8 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
     basePerPerson,
     penaltyPool: sum(penalties),
     orphanedPenalty: orphaned,
-    leftover: baseRemainder + remainder + orphaned + forfeitedSubsidy,
+    // 참여자에게 되돌려주고도 남은 끝전만 잔돈으로 남는다. 공대장이 지정돼 있으면 0.
+    leftover: leftoverRest,
     participants,
   };
 }

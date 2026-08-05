@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -649,24 +649,30 @@ export type Database = {
       raid_participant_subsidies: {
         Row: {
           amount: number
+          calc_type: Database["public"]["Enums"]["penalty_calc_type"]
           id: string
           name: string
           raid_participant_id: string
           subsidy_type_id: string | null
+          value: number
         }
         Insert: {
           amount: number
+          calc_type?: Database["public"]["Enums"]["penalty_calc_type"]
           id?: string
           name: string
           raid_participant_id: string
           subsidy_type_id?: string | null
+          value?: number
         }
         Update: {
           amount?: number
+          calc_type?: Database["public"]["Enums"]["penalty_calc_type"]
           id?: string
           name?: string
           raid_participant_id?: string
           subsidy_type_id?: string | null
+          value?: number
         }
         Relationships: [
           {
@@ -693,6 +699,9 @@ export type Database = {
           forfeited: boolean
           guest_name: string | null
           id: string
+          incentive: number
+          is_leader: boolean
+          leftover_share: number
           member_id: string | null
           penalty: number
           raid_id: string
@@ -707,6 +716,9 @@ export type Database = {
           forfeited?: boolean
           guest_name?: string | null
           id?: string
+          incentive?: number
+          is_leader?: boolean
+          leftover_share?: number
           member_id?: string | null
           penalty?: number
           raid_id: string
@@ -721,6 +733,9 @@ export type Database = {
           forfeited?: boolean
           guest_name?: string | null
           id?: string
+          incentive?: number
+          is_leader?: boolean
+          leftover_share?: number
           member_id?: string | null
           penalty?: number
           raid_id?: string
@@ -749,6 +764,8 @@ export type Database = {
         Row: {
           boss_name: string
           created_at: string
+          created_by: string | null
+          created_by_name: string | null
           date: string
           expense_total: number
           fee_total: number
@@ -772,6 +789,8 @@ export type Database = {
         Insert: {
           boss_name: string
           created_at?: string
+          created_by?: string | null
+          created_by_name?: string | null
           date?: string
           expense_total?: number
           fee_total?: number
@@ -795,6 +814,8 @@ export type Database = {
         Update: {
           boss_name?: string
           created_at?: string
+          created_by?: string | null
+          created_by_name?: string | null
           date?: string
           expense_total?: number
           fee_total?: number
@@ -828,6 +849,7 @@ export type Database = {
       subsidy_types: {
         Row: {
           amount: number
+          calc_type: Database["public"]["Enums"]["penalty_calc_type"]
           guild_id: string
           id: string
           is_active: boolean
@@ -836,6 +858,7 @@ export type Database = {
         }
         Insert: {
           amount?: number
+          calc_type?: Database["public"]["Enums"]["penalty_calc_type"]
           guild_id: string
           id?: string
           is_active?: boolean
@@ -844,6 +867,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          calc_type?: Database["public"]["Enums"]["penalty_calc_type"]
           guild_id?: string
           id?: string
           is_active?: boolean
@@ -871,6 +895,8 @@ export type Database = {
         Returns: {
           boss_name: string
           created_at: string
+          created_by: string | null
+          created_by_name: string | null
           date: string
           expense_total: number
           fee_total: number
@@ -967,6 +993,8 @@ export type Database = {
         Returns: {
           boss_name: string
           created_at: string
+          created_by: string | null
+          created_by_name: string | null
           date: string
           expense_total: number
           fee_total: number

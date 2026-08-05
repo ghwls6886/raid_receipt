@@ -11,8 +11,6 @@ import {
   updateParty,
   deleteParty,
   groupMembersByJob,
-  REMAINDER_POLICY_LABEL,
-  REMAINDER_POLICIES,
   type Member,
   type Party,
   type RemainderPolicy,
@@ -27,7 +25,7 @@ import { Modal } from '@/components/popup/Modal';
 import { LoadingState } from '@/components/feedback/LoadingState';
 import { cn } from '@/lib/cn';
 
-/** 직업 계열별 강조점 (길드원 카드뷰와 동일 색) */
+/** 직업 계열별 강조점 (공대원 카드뷰와 동일 색) */
 const CATEGORY_DOT: Record<string, string> = {
   전사: 'bg-error-500',
   마법사: 'bg-accent-violet',
@@ -92,8 +90,8 @@ export function PartiesPage() {
         <Card>
           <EmptyState
             Icon={Swords}
-            title="먼저 길드원을 등록하세요"
-            description="공대는 등록된 길드원으로 구성합니다."
+            title="먼저 공대원을 등록하세요"
+            description="공대는 등록된 공대원으로 구성합니다."
           />
         </Card>
       ) : parties.length === 0 ? (
@@ -149,7 +147,7 @@ interface PartyCardProps {
 function PartyCard({ party, memberById, onEdit, onDelete }: PartyCardProps) {
   const leader = memberById.get(party.leaderId);
   // 공대장을 비활성화하면 leaderId 가 비워진다. 조용히 '—' 로 두면 재지정이 필요한 줄
-  // 모르고 넘어가, 잔돈 정책이 '공대장 몫'인 공대에서 다음 정산이 어긋난다.
+  // 모르고 넘어가, 다음 정산에서 인센티브 수령자가 없어 인센티브가 통째로 빠진다.
   const needsLeader = !leader;
 
   return (
@@ -159,7 +157,7 @@ function PartyCard({ party, memberById, onEdit, onDelete }: PartyCardProps) {
           <h3 className="text-text-primary truncate text-base font-semibold">{party.name}</h3>
           <p className="text-text-tertiary mt-0.5 flex items-center gap-1 text-xs">
             <Crown className="text-warning-500 h-3.5 w-3.5" /> 공대장 {leader?.nickname ?? '—'} ·{' '}
-            {party.memberIds.length}명 · 잔돈 {REMAINDER_POLICY_LABEL[party.remainderPolicy]}
+            {party.memberIds.length}명
           </p>
         </div>
         <div className="flex shrink-0 gap-1">
@@ -232,9 +230,9 @@ function PartyModal({ guildId, members, party, onClose, onSaved }: PartyModalPro
   const [memberIds, setMemberIds] = useState<Set<string>>(
     () => new Set(party?.memberIds ?? leaderIdSeed(members)),
   );
-  const [remainderPolicy, setRemainderPolicy] = useState<RemainderPolicy>(
-    party?.remainderPolicy ?? 'fund',
-  );
+  // 잔돈은 이제 참여자에게 되돌려주므로 공대별 정책이 없다. 컬럼은 과거 레이드가
+  // 참조하고 있어 남겨 두고, 새로 저장할 때는 기본값만 넣는다.
+  const remainderPolicy: RemainderPolicy = 'fund';
 
   const toggle = (id: string) => {
     if (id === leaderId) return; // 공대장은 항상 포함
@@ -302,20 +300,6 @@ function PartyModal({ guildId, members, party, onClose, onSaved }: PartyModalPro
             {members.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.nickname} ({m.job})
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        <div className="shrink-0">
-          <label className="text-text-secondary mb-1 block text-sm font-medium">잔돈 처리</label>
-          <Select
-            value={remainderPolicy}
-            onChange={(e) => setRemainderPolicy(e.target.value as RemainderPolicy)}
-          >
-            {REMAINDER_POLICIES.map((p) => (
-              <option key={p} value={p}>
-                {REMAINDER_POLICY_LABEL[p]}
               </option>
             ))}
           </Select>

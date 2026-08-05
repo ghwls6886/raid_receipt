@@ -114,17 +114,19 @@ export function SubsidyQuickAddDialog({ guildId, isOpen, onClose }: QuickAddDial
   const [name, setName] = useState('');
   /** 빈 문자열 = 직업 무관(수동 전용). DB 에는 null 로 들어간다 */
   const [job, setJob] = useState('');
+  const [calcType, setCalcType] = useState<PenaltyCalcType>('fixed');
   const [amount, setAmount] = useState(1000000);
 
   const close = () => {
     setName('');
     setJob('');
+    setCalcType('fixed');
     setAmount(1000000);
     onClose();
   };
 
   const addMutation = useMutation({
-    mutationFn: () => addSubsidyType(guildId, { name, job: job || null, amount }),
+    mutationFn: () => addSubsidyType(guildId, { name, job: job || null, calcType, amount }),
     onSuccess: (created) => {
       toast.success(`'${created.name}' 지원금이 추가되었습니다.`);
       void queryClient.invalidateQueries({ queryKey: ['subsidy-types', guildId] });
@@ -157,7 +159,7 @@ export function SubsidyQuickAddDialog({ guildId, isOpen, onClose }: QuickAddDial
       <div className="space-y-3">
         <p className="text-text-tertiary text-xs leading-relaxed">
           샤프아이즈·부활처럼 역할에 주는 대가입니다. n빵 <b className="text-text-secondary">전</b>
-          에 분배 대상액에서 먼저 떼므로 공대장 뽀찌는 줄지 않고 공대원 전원이 1/N씩 부담합니다.
+          에 분배 대상액에서 먼저 떼므로 공대장 인센티브는 줄지 않고 공대원 전원이 1/N씩 부담합니다.
         </p>
         <div>
           <label className="text-text-secondary mb-1 block text-xs font-medium">지원금명</label>
@@ -183,20 +185,43 @@ export function SubsidyQuickAddDialog({ guildId, isOpen, onClose }: QuickAddDial
             ))}
           </Select>
           <p className="text-text-tertiary mt-1 text-xs">
-            직업을 고르면 그 직업 길드원에게 칩이 자동으로 켜집니다. 안 줄 날은 칩을 눌러 끄면
+            직업을 고르면 그 직업 공대원에게 칩이 자동으로 켜집니다. 안 줄 날은 칩을 눌러 끄면
             됩니다.
           </p>
         </div>
         <div>
-          <label className="text-text-secondary mb-1 block text-xs font-medium">금액 (메소)</label>
+          <label className="text-text-secondary mb-1 block text-xs font-medium">계산 방식</label>
+          <Select
+            value={calcType}
+            onChange={(e) => {
+              const next = e.target.value as PenaltyCalcType;
+              setCalcType(next);
+              // 단위가 바뀌므로 기본값도 같이 바꾼다 (100만% 같은 값이 남지 않도록)
+              setAmount(next === 'percent' ? 5 : 1000000);
+            }}
+          >
+            <option value="fixed">정액 (메소)</option>
+            <option value="percent">비율 (순수익의 %)</option>
+          </Select>
+        </div>
+        <div>
+          <label className="text-text-secondary mb-1 block text-xs font-medium">
+            {calcType === 'percent' ? '비율 (%)' : '금액 (메소)'}
+          </label>
           <Input
             type="number"
             min={0}
-            step={100000}
+            max={calcType === 'percent' ? 100 : undefined}
+            step={calcType === 'percent' ? 1 : 100000}
             value={amount}
             onChange={(e) => setAmount(Number(e.target.value) || 0)}
-            placeholder="1000000"
+            placeholder={calcType === 'percent' ? '5' : '1000000'}
           />
+          {calcType === 'percent' && (
+            <p className="text-text-tertiary mt-1 text-xs">
+              공대 경비까지 뺀 <b className="text-text-secondary">순수익</b> 기준입니다.
+            </p>
+          )}
         </div>
       </div>
     </Modal>
