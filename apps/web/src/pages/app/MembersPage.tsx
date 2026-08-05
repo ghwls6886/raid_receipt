@@ -30,7 +30,7 @@ import { cn } from '@/lib/cn';
 const ROLE_LABEL: Record<MemberRole, string> = {
   MASTER: '마스터',
   MANAGER: '부마스터',
-  MEMBER: '길드원',
+  MEMBER: '공대원',
 };
 const ROLE_TONE: Record<MemberRole, 'brand' | 'warning' | 'neutral'> = {
   MASTER: 'brand',
@@ -50,7 +50,7 @@ const CATEGORY_DOT: Record<string, string> = {
 
 type Tab = 'active' | 'inactive';
 
-/** 길드원 (명세서 §5 길드원 등록) */
+/** 공대원 (명세서 §5 공대원 등록) */
 export function MembersPage() {
   const guild = useCurrentGuild();
   const queryClient = useQueryClient();
@@ -107,7 +107,7 @@ export function MembersPage() {
   const askDeactivate = async (m: Member) => {
     const ok = await confirm.warning(
       `'${m.nickname}'을(를) 비활성화할까요?\n명단과 공대에서 빠지지만 과거 레이드 기록과 참여도는 그대로 남습니다.`,
-      '길드원 비활성화',
+      '공대원 비활성화',
     );
     if (ok) deactivateMutation.mutate(m.id);
   };
@@ -117,7 +117,7 @@ export function MembersPage() {
   return (
     <div>
       <PageHeader
-        title="길드원"
+        title="공대원"
         description={
           active.length > 0
             ? `활동 ${active.length}명 · 직업 계열별`
@@ -125,14 +125,14 @@ export function MembersPage() {
         }
         actions={
           <Button onClick={() => setOpen(true)}>
-            <UserPlus className="h-4 w-4" /> 길드원 등록
+            <UserPlus className="h-4 w-4" /> 공대원 등록
           </Button>
         }
       />
 
       <div className="border-border-subtle mb-5 flex gap-1 border-b">
         <TabButton active={tab === 'active'} onClick={() => setTab('active')} Icon={Users}>
-          활동 길드원 {active.length}
+          활동 공대원 {active.length}
         </TabButton>
         <TabButton active={tab === 'inactive'} onClick={() => setTab('inactive')} Icon={UserMinus}>
           비활성 {inactive.length}
@@ -164,11 +164,11 @@ export function MembersPage() {
         <Card>
           <EmptyState
             Icon={Users}
-            title="등록된 길드원이 없습니다"
-            description="레이드 참여자를 관리하려면 먼저 길드원을 등록하세요."
+            title="등록된 공대원이 없습니다"
+            description="레이드 참여자를 관리하려면 먼저 공대원을 등록하세요."
             action={
               <Button variant="secondary" onClick={() => setOpen(true)}>
-                <UserPlus className="h-4 w-4" /> 길드원 등록
+                <UserPlus className="h-4 w-4" /> 공대원 등록
               </Button>
             }
           />
@@ -215,14 +215,14 @@ interface InactiveListProps {
   pending: boolean;
 }
 
-/** 비활성 길드원 — 명단에서는 빠졌지만 과거 레이드·참여도에는 그대로 남아 있는 사람들 */
+/** 비활성 공대원 — 명단에서는 빠졌지만 과거 레이드·참여도에는 그대로 남아 있는 사람들 */
 function InactiveList({ members, onReactivate, pending }: InactiveListProps) {
   if (members.length === 0) {
     return (
       <Card>
         <EmptyState
           Icon={UserMinus}
-          title="비활성 길드원이 없습니다"
+          title="비활성 공대원이 없습니다"
           description="길드를 떠난 사람은 삭제 대신 비활성화하세요. 과거 레이드 기록이 보존됩니다."
         />
       </Card>
@@ -252,7 +252,7 @@ function InactiveList({ members, onReactivate, pending }: InactiveListProps) {
         ))}
       </ul>
       <p className="text-text-tertiary mt-3 text-xs">
-        비활성 길드원은 공대 편성과 레이드 참여자 선택에 나타나지 않습니다. 지난 레이드 기록과
+        비활성 공대원은 공대 편성과 레이드 참여자 선택에 나타나지 않습니다. 지난 레이드 기록과
         참여도 집계에는 그대로 남아 있습니다.
       </p>
     </Card>
@@ -341,7 +341,7 @@ function AddMemberModal({ isOpen, guildId, onClose, onAdded }: AddMemberModalPro
   const mutation = useMutation({
     mutationFn: () => addMember(guildId, { nickname, jobCategory: category, job, level, role }),
     onSuccess: () => {
-      toast.success('길드원이 등록되었습니다.');
+      toast.success('공대원이 등록되었습니다.');
       reset();
       onAdded();
       onClose();
@@ -353,7 +353,7 @@ function AddMemberModal({ isOpen, guildId, onClose, onAdded }: AddMemberModalPro
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="길드원 등록"
+      title="공대원 등록"
       width={460}
       footer={
         <>

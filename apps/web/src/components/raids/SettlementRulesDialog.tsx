@@ -54,7 +54,7 @@ export function SettlementRulesDialog({ isOpen, onClose }: SettlementRulesDialog
           <h3 className="text-text-primary mb-1 font-semibold">역할 지원금</h3>
           <p>
             n빵 <b className="text-text-primary">전</b>에 분배 대상액에서 먼저 떼어 지급하므로
-            공대장 뽀찌는 줄지 않고 공대원 전원이 1/N씩 부담합니다. 이탈해도 전액 지급되지만 몰수
+            공대장 인센티브는 줄지 않고 공대원 전원이 1/N씩 부담합니다. 이탈해도 전액 지급되지만 몰수
             대상자에게는 지급되지 않습니다.
           </p>
         </section>

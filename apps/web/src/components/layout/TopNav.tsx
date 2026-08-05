@@ -24,7 +24,7 @@ const NAV_ITEMS = [
   { to: '/dashboard', label: '대시보드', Icon: LayoutDashboard, end: true },
   { to: '/raids', label: '레이드', Icon: ScrollText, end: false },
   { to: '/parties', label: '공대 구성', Icon: Swords, end: false },
-  { to: '/members', label: '길드원', Icon: Users, end: false },
+  { to: '/members', label: '공대원', Icon: Users, end: false },
   { to: '/settings', label: '길드 설정', Icon: Settings, end: false },
 ] as const;
 

@@ -89,11 +89,11 @@ export function PrivacyPage() {
         <ul className="list-disc space-y-1 pl-5">
           <li>구글 계정 정보(이메일) — 로그인·식별</li>
           <li>디스코드 웹훅 URL — 정산 영수증 발송</li>
-          <li>인게임 닉네임 — 길드원 관리·정산 표기</li>
+          <li>인게임 닉네임 — 공대원 관리·정산 표기</li>
         </ul>
       </Section>
       <Section title="2. 수집 및 이용 목적">
-        <p>회원 식별 및 로그인, 정산 영수증의 디스코드 발송, 길드원·정산 데이터 관리를 위해 이용합니다.</p>
+        <p>회원 식별 및 로그인, 정산 영수증의 디스코드 발송, 공대원·정산 데이터 관리를 위해 이용합니다.</p>
       </Section>
       <Section title="3. 보관 및 파기">
         <p>
