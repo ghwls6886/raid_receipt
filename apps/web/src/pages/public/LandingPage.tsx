@@ -11,7 +11,7 @@ interface Feature {
 }
 
 const FEATURES: Feature[] = [
-  { Icon: Zap, title: '자동 정산', desc: '순수익·뽀찌·재료비·패널티까지 공식대로 자동 계산.' },
+  { Icon: Zap, title: '자동 정산', desc: '순수익·인센티브·재료비·패널티까지 공식대로 자동 계산.' },
   { Icon: Receipt, title: '디스코드 영수증', desc: '확정 즉시 길드 채널로 영수증 이미지를 발송.' },
   { Icon: Swords, title: '공대 관리', desc: '공대를 저장해 두고 클릭 한 번에 명단 소환.' },
   { Icon: BarChart3, title: '참여도 통계', desc: '보스별 1인당 평균·개인 참여도를 한눈에.' },
@@ -25,8 +25,18 @@ export function LandingPage() {
   const session = useAuthStore((s) => s.session);
   const onboarded = useAuthStore((s) => s.onboarded);
 
+  const authLoading = useAuthStore((s) => s.loading);
+
   const ctaTo = session ? (onboarded ? '/dashboard' : '/onboarding') : '/login';
   const ctaLabel = session ? '대시보드로 이동' : '무료로 시작하기';
+
+  // 로그인한 사람에게 마케팅 화면을 보여줄 이유가 없다. 바로 안으로 보낸다.
+  // 구글 OAuth 콜백이 redirectTo(/login) 대신 Site URL(/) 로 떨어져도 여기서 받아낸다.
+  // authLoading 중에는 세션 복원이 안 끝나 로그인 상태를 오판하므로 기다린다.
+  useEffect(() => {
+    if (authLoading || !session) return;
+    navigate(onboarded ? '/dashboard' : '/onboarding', { replace: true });
+  }, [authLoading, session, onboarded, navigate]);
 
   // 랜딩은 마케팅 화면이라 다크모드 설정과 무관하게 항상 라이트로 고정
   useEffect(() => {
