@@ -404,15 +404,9 @@ export function RaidNewPage() {
   );
 
   const hasPenalty = result.penaltyPool > 0;
-  // 대표값: 패널티·이탈·지원금이 모두 없는 완주자 기준 (없으면 첫 참여자).
-  // 지원금 수령자를 대표값으로 쓰면 헤드라인 1인당이 부풀려진다.
-  const cleanIdx = participantsInput.findIndex(
-    (p) => p.penalties.length === 0 && p.subsidies.length === 0 && p.exitPhase == null,
-  );
-  const finalPerPerson =
-    (cleanIdx >= 0 ? result.participants[cleanIdx]?.final : undefined) ??
-    result.participants[0]?.final ??
-    result.basePerPerson;
+  // 대표값 계산은 settlement.ts 가 갖는다. 화면에서 따로 고르면 저장되는 per_person
+  // 과 어긋나고, 인센티브 같은 항목이 늘 때마다 제외 조건을 두 곳에서 맞춰야 한다.
+  const finalPerPerson = result.representativePerPerson;
   const loading =
     bossesQuery.isLoading ||
     membersQuery.isLoading ||
@@ -1112,10 +1106,20 @@ export function RaidNewPage() {
                                 : '재분배 수령 없음'}
                             </span>
                           ) : (
-                            (pr.penalty > 0 || pr.redistributed > 0 || pr.subsidy > 0) && (
+                            (pr.penalty > 0 ||
+                              pr.redistributed > 0 ||
+                              pr.subsidy > 0 ||
+                              pr.incentive > 0 ||
+                              pr.leftoverShare > 0) && (
                               <span className="block text-xs tabular-nums">
+                                {/* 공대장 금액이 왜 큰지 여기서 설명돼야 한다 */}
+                                {pr.incentive > 0 && (
+                                  <span className="text-warning-600">
+                                    인센 +{formatMeso(pr.incentive)}
+                                  </span>
+                                )}
                                 {pr.subsidy > 0 && (
-                                  <span className="text-brand-600">
+                                  <span className="text-brand-600 ml-1">
                                     지원 +{formatMeso(pr.subsidy)}
                                   </span>
                                 )}
@@ -1127,6 +1131,11 @@ export function RaidNewPage() {
                                 {pr.redistributed > 0 && (
                                   <span className="text-success-600 ml-1">
                                     +{formatMeso(pr.redistributed)}
+                                  </span>
+                                )}
+                                {pr.leftoverShare > 0 && (
+                                  <span className="text-text-tertiary ml-1">
+                                    잔돈 +{formatMeso(pr.leftoverShare)}
                                   </span>
                                 )}
                               </span>
@@ -1278,9 +1287,11 @@ export function RaidNewPage() {
                 {formatMeso(finalPerPerson)}
                 <span className="ml-1 text-sm font-normal">메소</span>
               </p>
-              {(hasPenalty || result.subsidyTotal > 0) && (
+              {(hasPenalty || result.subsidyTotal > 0 || result.leaderPpoji > 0) && (
                 <p className="text-text-tertiary mt-1 text-xs">
-                  패널티·이탈 시점·역할 지원금에 따라 개인별 금액이 다릅니다 →{' '}
+                  {result.leaderPpoji > 0
+                    ? '공대장 인센티브·패널티·이탈 시점·역할 지원금을 뺀 기준값입니다. 공대장은 여기에 인센티브가 더해집니다 → '
+                    : '패널티·이탈 시점·역할 지원금에 따라 개인별 금액이 다릅니다 → '}
                   <b>③ 참여자별 정산</b> 참고
                 </p>
               )}

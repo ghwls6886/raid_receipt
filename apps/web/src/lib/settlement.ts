@@ -127,6 +127,13 @@ export interface SettlementResult {
   distributableAfterSubsidy: number;
   participantCount: number;
   basePerPerson: number;
+  /**
+   * 화면·영수증에 "1인당"으로 내세우는 대표 금액.
+   * 인센티브·지원금·패널티가 없고 완주한 사람의 실수령액이며, 그런 사람이 없으면
+   * basePerPerson 으로 떨어진다. 공대장을 대표로 뽑으면 인센티브가 섞여 부풀려지고,
+   * 지원금 수령자를 뽑아도 마찬가지라 둘 다 제외한다.
+   */
+  representativePerPerson: number;
   /** 패널티로 걷힌 총액 */
   penaltyPool: number;
   /** 수령 자격자가 없어 잔돈 정책으로 흘러간 패널티 */
@@ -321,6 +328,20 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
     };
   });
 
+  // 대표 1인당 — 아무 가감이 없는 완주자의 실수령액.
+  // 잔돈 재분배(leftoverShare)와 남의 벌금 수령(redistributed)은 그 사람이 실제로
+  // 받는 돈이므로 포함한다. 인센티브·지원금·패널티·몰수는 개인 사정이라 제외한다.
+  const cleanIdx = input.participants.findIndex(
+    (p, i) =>
+      !p.isLeader &&
+      !p.penalties?.length &&
+      !p.subsidies?.length &&
+      p.exitPhase == null &&
+      !forfeited[i],
+  );
+  const representativePerPerson =
+    cleanIdx >= 0 ? (participants[cleanIdx]?.final ?? basePerPerson) : basePerPerson;
+
   return {
     grossSales,
     feeTotal,
@@ -336,6 +357,7 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
     distributableAfterSubsidy,
     participantCount: n,
     basePerPerson,
+    representativePerPerson,
     penaltyPool: sum(penalties),
     orphanedPenalty: orphaned,
     // 참여자에게 되돌려주고도 남은 끝전만 잔돈으로 남는다. 공대장이 지정돼 있으면 0.

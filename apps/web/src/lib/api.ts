@@ -689,7 +689,8 @@ export async function saveRaid(guildId: string, input: RaidInput): Promise<RaidR
     subsidy_total: settlement.subsidyTotal,
     leftover: settlement.leftover,
     participant_count: settlement.participantCount,
-    per_person: settlement.basePerPerson,
+    // 목록의 "1인당" 열이 작성 화면 헤드라인과 같은 값이어야 한다 (settlement.ts 참고)
+    per_person: settlement.representativePerPerson,
     drops: input.drops.map((d) => ({
       name: d.name,
       sale_price: d.salePrice,
