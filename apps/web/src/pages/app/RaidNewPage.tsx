@@ -115,6 +115,27 @@ const CATEGORY_DOT: Record<string, string> = {
 
 const AUTOSAVE_MS = 5000;
 
+/**
+ * 화면을 벗어나며 흘려보낸 마지막 임시저장.
+ *
+ * 디바운스가 차기 전에 나가면 그 입력이 통째로 사라지므로 언마운트 때 한 번 더 저장한다.
+ * 그런데 그 저장이 끝나기 전에 편집 화면으로 다시 들어오면 저장 직전의 데이터를 읽어
+ * 폼에 채우게 된다 — 그래서 컴포넌트가 사라진 뒤에도 살아남는 모듈 스코프에 두고,
+ * 상세를 읽기 전에 반드시 이걸 먼저 기다린다.
+ */
+let pendingFlush: Promise<unknown> | null = null;
+
+async function awaitPendingFlush(): Promise<void> {
+  if (!pendingFlush) return;
+  try {
+    await pendingFlush;
+  } catch {
+    // 흘려보낸 저장이 실패했어도 읽기는 진행한다. 실패는 다음 자동저장이 다시 알린다.
+  } finally {
+    pendingFlush = null;
+  }
+}
+
 /** 이탈 시점 셀렉트의 "+ 페이즈 늘리기" 항목 값 — 실제 페이즈 번호와 겹치지 않게 */
 const ADD_PHASE_VALUE = '__add_phase__';
 
@@ -180,15 +201,29 @@ export function RaidNewPage() {
     queryKey: ['subsidy-types', guild.id],
     queryFn: () => getSubsidyTypes(guild.id),
   });
+  // 편집 폼은 반드시 서버의 현재 값에서 출발해야 한다. 전역 staleTime(30초) 때문에
+  // 자동저장 직후 다시 들어오면 캐시가 저장 전 데이터를 그대로 돌려주고, 프리필은
+  // 한 번뿐이라(prefilledRef) 뒤늦게 도착한 최신 데이터가 무시된다 —
+  // 사용자 눈에는 "임시저장이 안 됐다"로 보인다. 이 두 쿼리만 캐시를 끈다.
   const detailQuery = useQuery({
     queryKey: ['raid-detail', routeId],
-    queryFn: () => getRaidDetail(routeId ?? ''),
+    queryFn: async () => {
+      await awaitPendingFlush();
+      return getRaidDetail(routeId ?? '');
+    },
     enabled: isEdit,
+    staleTime: 0,
+    gcTime: 0,
   });
   const rowQuery = useQuery({
     queryKey: ['raid', guild.id, routeId],
-    queryFn: () => getRaid(guild.id, routeId ?? ''),
+    queryFn: async () => {
+      await awaitPendingFlush();
+      return getRaid(guild.id, routeId ?? '');
+    },
     enabled: isEdit,
+    staleTime: 0,
+    gcTime: 0,
   });
 
   const [bossName, setBossName] = useState('');
@@ -228,6 +263,16 @@ export function RaidNewPage() {
   const [autosaveError, setAutosaveError] = useState<string | null>(null);
   /** 자동저장이 겹쳐 돌면 같은 레이드를 두 트랜잭션이 동시에 지우고 다시 넣는다 */
   const autosavingRef = useRef(false);
+  /** 저장이 겹쳐 미뤄졌을 때 타이머를 다시 걸기 위한 트리거 (값 자체는 의미 없음) */
+  const [autosaveTick, setAutosaveTick] = useState(0);
+  /** 아직 서버에 반영되지 않은 변경이 있는지 — 언마운트 시 흘려보낼지 판단한다 */
+  const dirtyRef = useRef(false);
+  /** 언마운트 정리 함수가 볼 "지금 값"들. 정리 함수의 클로저는 옛 값을 붙잡고 있다 */
+  const buildInputRef = useRef<(status: RaidStatus, id?: string) => RaidInput>(
+    () => ({}) as RaidInput,
+  );
+  const draftIdRef = useRef<string | undefined>(undefined);
+  const canAutosaveRef = useRef(false);
   const [pending, setPending] = useState(false);
   /** ③ 참여자별 정산 카드에서 여는 팝업들 (규칙 설명 · 정책 유형 즉석 추가) */
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -486,12 +531,25 @@ export function RaidNewPage() {
 
   // 자동 임시저장 — 확정된 건이 아니고, 보스+참여자가 있으면 몇 초 뒤 draft 저장
   const canAutosave = !wasConfirmed && !pending && bossName !== '' && participantRows.length > 0;
+
+  // 언마운트 시점에 최신 값이 필요한데 정리 함수는 그때의 클로저를 볼 수 없다.
+  // 렌더마다 ref 를 갱신해 "지금 값"을 들고 있게 한다.
+  buildInputRef.current = buildInput;
+  draftIdRef.current = draftId;
+  canAutosaveRef.current = canAutosave;
+
   useEffect(() => {
     if (loading || !canAutosave) return;
+    // 입력이 바뀔 때마다 이 effect 가 다시 돈다 = 아직 저장되지 않은 변경이 있다는 뜻
+    dirtyRef.current = true;
     const timer = setTimeout(() => {
-      // 앞선 저장이 아직 안 끝났으면 건너뛴다. save_raid 는 참여자를 통째로 지우고
+      // 앞선 저장이 아직 안 끝났으면 미룬다. save_raid 는 참여자를 통째로 지우고
       // 다시 넣기 때문에, 같은 레이드에 두 번이 겹치면 중복 행이나 교착이 생긴다.
-      if (autosavingRef.current) return;
+      // 다만 그냥 버리면 그 사이의 입력이 영영 저장되지 않는다 — 반드시 다시 예약한다.
+      if (autosavingRef.current) {
+        setAutosaveTick((t) => t + 1);
+        return;
+      }
       autosavingRef.current = true;
       void (async () => {
         try {
@@ -499,7 +557,12 @@ export function RaidNewPage() {
           setDraftId(row.id);
           setLastSavedAt(new Date().toLocaleTimeString('ko-KR'));
           setAutosaveError(null);
+          dirtyRef.current = false;
           void queryClient.invalidateQueries({ queryKey: ['raids', guild.id] });
+          // 편집 화면을 다시 열 때 이 저장분이 보여야 한다. 목록만 무효화하면
+          // 상세 캐시에 저장 전 데이터가 남아 폼이 옛 값으로 복원된다.
+          void queryClient.invalidateQueries({ queryKey: ['raid-detail', row.id] });
+          void queryClient.invalidateQueries({ queryKey: ['raid', guild.id, row.id] });
         } catch (error: unknown) {
           // 이미 확정된 레이드면 재시도해도 영원히 400 이다. 자동저장을 끊는다.
           if (isConfirmedRaidError(error)) {
@@ -529,9 +592,31 @@ export function RaidNewPage() {
     exitPhaseBy,
     phaseCount,
     remainderPolicy,
+    // 공대장만 바꾸면 인센티브 수령자가 달라져 정산이 통째로 바뀐다.
+    // 여기 빠져 있어서 그 변경만으로는 자동저장이 걸리지 않았다.
+    leaderRowId,
+    // 저장이 겹쳐 미뤄졌을 때 다시 예약하기 위한 트리거
+    autosaveTick,
     canAutosave,
     loading,
   ]);
+
+  /**
+   * 화면을 벗어날 때의 마지막 저장.
+   *
+   * 자동저장은 5초 디바운스라, 고치고 바로 목록으로 나가면 타이머가 취소되어 그 입력이
+   * 사라진다. 남은 변경이 있으면 흘려보내고, 다시 들어올 때 상세 조회가 이 저장을
+   * 기다리도록 pendingFlush 에 걸어 둔다(위 awaitPendingFlush).
+   */
+  useEffect(() => {
+    return () => {
+      if (!dirtyRef.current || !canAutosaveRef.current) return;
+      dirtyRef.current = false;
+      pendingFlush = saveRaid(guild.id, buildInputRef.current('draft', draftIdRef.current));
+      // 여기서 잡지 않으면 처리되지 않은 rejection 이 된다. 실제 처리는 awaitPendingFlush.
+      void pendingFlush.catch(() => {});
+    };
+  }, [guild.id]);
 
   // ── 핸들러 ────────────────────────────────────────────
   /** 참여자가 빠지면 그 사람에게 걸린 패널티·이탈 페이즈도 같이 지운다 */
@@ -706,6 +791,9 @@ export function RaidNewPage() {
     }
 
     setPending(true);
+    // 이 저장이 폼 전체를 반영하므로 언마운트 flush 가 다시 쏠 이유가 없다.
+    // 특히 확정 뒤에는 save_raid 가 CONFIRMED 를 거부하므로 400 만 하나 더 날아간다.
+    dirtyRef.current = false;
     try {
       const saved = await saveRaid(guild.id, buildInput(status, draftId));
       // 확정이 끝난 순간 자동저장을 끈다. 이 아래(무효화·토스트·이동)에서 뭐라도 실패해
