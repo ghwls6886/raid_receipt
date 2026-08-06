@@ -82,10 +82,23 @@ enable_signup = false
 enable_confirmations = false
 
 # ── 구글 OAuth ───────────────────────────────────────────────────────────────
-# P3-4 에서 레포 "루트"에 .env 를 만든 뒤(GOOGLE_CLIENT_ID / GOOGLE_SECRET)
-# 아래 주석을 해제하고 `pnpm db:stop && pnpm db:start` 로 재기동한다.
-# 지금 켜두면 env 가 없어 start 가 실패하므로 P3 전까지는 주석 유지.
+# 아래 블록은 켜져 있지만 client_id/secret 이 레포 "루트" .env 의
+# GOOGLE_CLIENT_ID / GOOGLE_SECRET 을 참조한다. 그 파일이 없으면 CLI 가 provider 를
+# 조용히 건너뛴다 (확인: /auth/v1/settings 응답의 "google":false).
+# start 가 실패하지는 않아서 "켜져 있는데 왜 안 되지" 로 헷갈리기 쉽다.
 #
+# 로컬 테스트는 구글 대신 **이메일/비밀번호**로 한다 — 로그인 화면에 이미 폼이 있고
+# 아래 [auth.email] enable_confirmations = false 라 가입 즉시 로그인된다.
+#
+# 로컬에서 굳이 구글 플로우까지 검증해야 한다면:
+#   1) 레포 루트에 .env 생성 → GOOGLE_CLIENT_ID / GOOGLE_SECRET
+#   2) Google Cloud Console 승인된 리디렉션 URI 에
+#      http://127.0.0.1:54321/auth/v1/callback 추가
+#   3) pnpm db:stop && pnpm db:start
+#
+# ⚠️ dev:cloud 로 원격에 붙으면 로그인 후 배포 도메인으로 튕긴다.
+#    signInWithOAuth 의 redirectTo 는 원격 대시보드의 Redirect URLs 허용목록에
+#    http://localhost:5173/** 가 있을 때만 존중되고, 없으면 Site URL 로 폴백하기 때문이다.
 [auth.external.google]
 enabled = true
 client_id = "env(GOOGLE_CLIENT_ID)"
