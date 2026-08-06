@@ -1126,7 +1126,9 @@ export function RaidNewPage() {
                 <Plus className="h-4 w-4" /> 드랍템 추가
               </Button>
             </div>
-            <div className="divide-border-subtle divide-y">
+            {/* 판매자 줄이 생기면서 한 아이템이 두 줄이 됐다. 구분선만으로는 어디까지가
+                같은 아이템인지 흐려져서, 아이템마다 테두리 있는 카드로 감싼다. */}
+            <div className="space-y-2.5">
               {drops.map((d, di) => {
                 const fee = Math.floor(
                   (Math.max(0, d.salePrice) * Math.min(Math.max(d.feePct, 0), 100)) / 100,
@@ -1136,7 +1138,10 @@ export function RaidNewPage() {
                 const sellerMissing =
                   d.sellerId !== null && !participantRows.some((p) => p.id === d.sellerId);
                 return (
-                  <div key={d.id} className="space-y-2 py-2 first:pt-0 last:pb-0">
+                  <div
+                    key={d.id}
+                    className="border-border-subtle bg-bg-muted/40 space-y-2 rounded-lg border p-3"
+                  >
                     <div className="flex items-center gap-2">
                       <Input
                         placeholder="드랍템 이름 (예: 이지스)"
@@ -1189,8 +1194,9 @@ export function RaidNewPage() {
                     </div>
 
                     {/* 판매 인센티브 — 이 아이템을 대신 팔아준 사람에게 주는 수고비.
-                      행마다 사람과 요율이 다를 수 있어 드랍템 행에 붙는다. */}
-                    <div className="flex flex-wrap items-center gap-2 pl-1">
+                      아이템마다 사람과 요율이 다를 수 있어 그 아이템 카드 안에 둔다.
+                      위 구분선으로 "이 아이템에 딸린 설정"임을 드러낸다. */}
+                    <div className="border-border-subtle flex flex-wrap items-center gap-2 border-t pt-2">
                       <span className="text-text-tertiary shrink-0 text-xs">판매자</span>
                       <Select
                         className="w-40 shrink-0"
