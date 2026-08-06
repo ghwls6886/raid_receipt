@@ -1,8 +1,9 @@
-import { Pencil, Lock, Trash2 } from 'lucide-react';
+import { Pencil, Lock, Trash2, Send } from 'lucide-react';
 import type { RaidRow } from '@/lib/api';
 import { canDeleteRaid, isRaidEditable, isRaidMine } from '@/lib/api';
 import { Badge } from '@/components/ui/Badge';
 import { formatDate, formatMeso } from '@/lib/format';
+import { cn } from '@/lib/cn';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { useCurrentGuild } from '@/stores/useGuildStore';
 
@@ -13,6 +14,18 @@ interface RaidTableProps {
   onEdit?: (row: RaidRow) => void;
   /** 지정 시 삭제 가능한 임시저장 건에 삭제 버튼이 같이 뜬다 (canDeleteRaid 참고) */
   onDelete?: (row: RaidRow) => void;
+  /**
+   * 지정 시 확정 건의 "발송" 열에 재발송 버튼이 뜬다.
+   * 확정은 수정할 수 없으므로, 잘못 나간 영수증을 바로잡는 유일한 수단이 재발송이다.
+   */
+  onResend?: (row: RaidRow) => void;
+}
+
+/** 발송 시각 툴팁 — 재발송이 가능하므로 "언제 · 몇 번" 이 같이 보여야 한다 */
+function sendTitle(r: RaidRow): string {
+  if (!r.sent) return '아직 발송되지 않았습니다';
+  const when = r.sentAt ? new Date(r.sentAt).toLocaleString('ko-KR') : '시각 미기록';
+  return r.sendCount > 1 ? `${when} · 총 ${r.sendCount}회 발송` : when;
 }
 
 /** 레이드 이력 테이블 — 대시보드(최근) / 레이드 페이지(전체) 공용 */
@@ -21,6 +34,7 @@ export function RaidTable({
   emptyText = '레이드 내역이 없습니다.',
   onEdit,
   onDelete,
+  onResend,
 }: RaidTableProps) {
   // 소유권 판정용. 서버(save_raid/delete_raid)가 같은 규칙을 다시 검사하므로 여기선
   // 버튼을 잠그고 이유를 보여주는 역할만 한다.
@@ -73,8 +87,33 @@ export function RaidTable({
                   <td className="px-4 py-3 text-center">
                     <Badge tone={isDraft ? 'warning' : 'success'}>{isDraft ? '임시' : '확정'}</Badge>
                   </td>
-                  <td className="px-4 py-3 text-center">
-                    <Badge tone={r.sent ? 'brand' : 'neutral'}>{r.sent ? '발송' : '미발송'}</Badge>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-center gap-1">
+                      <span title={sendTitle(r)}>
+                        <Badge tone={r.sent ? 'brand' : 'neutral'}>
+                          {r.sent ? '발송' : '미발송'}
+                        </Badge>
+                      </span>
+                      {/* 임시저장 건은 아직 보낼 영수증이 없다. 확정 건만 대상.
+                          미발송은 눈에 띄게, 이미 보낸 건은 약하게 — 중복 발송을 부추기지
+                          않으면서도 잘못된 채널로 나간 경우 다시 보낼 길은 열어 둔다. */}
+                      {onResend && !isDraft && (
+                        <button
+                          aria-label={r.sent ? '다시 보내기' : '재발송'}
+                          title={r.sent ? '디스코드로 다시 보내기' : '디스코드로 발송'}
+                          className={cn(
+                            'rounded-md p-1.5',
+                            r.sent
+                              ? 'text-text-muted hover:bg-bg-hover hover:text-brand-600'
+                              : 'text-brand-600 hover:bg-brand-50',
+                          )}
+                          onClick={() => onResend(r)}
+                          type="button"
+                        >
+                          <Send className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                   {onEdit && (
                     <td className="px-4 py-3">

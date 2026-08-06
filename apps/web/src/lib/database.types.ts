@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.15"
-  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -538,25 +533,37 @@ export type Database = {
         Row: {
           fee_pct: number
           id: string
+          incentive_amount: number
+          incentive_pct: number
           name: string
           raid_id: string
           sale_price: number
+          seller_guest_name: string | null
+          seller_member_id: string | null
           sort_order: number
         }
         Insert: {
           fee_pct?: number
           id?: string
+          incentive_amount?: number
+          incentive_pct?: number
           name: string
           raid_id: string
           sale_price?: number
+          seller_guest_name?: string | null
+          seller_member_id?: string | null
           sort_order?: number
         }
         Update: {
           fee_pct?: number
           id?: string
+          incentive_amount?: number
+          incentive_pct?: number
           name?: string
           raid_id?: string
           sale_price?: number
+          seller_guest_name?: string | null
+          seller_member_id?: string | null
           sort_order?: number
         }
         Relationships: [
@@ -565,6 +572,13 @@ export type Database = {
             columns: ["raid_id"]
             isOneToOne: false
             referencedRelation: "raids"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "raid_drops_seller_member_id_fkey"
+            columns: ["seller_member_id"]
+            isOneToOne: false
+            referencedRelation: "members"
             referencedColumns: ["id"]
           },
         ]
@@ -706,6 +720,7 @@ export type Database = {
           penalty: number
           raid_id: string
           redistributed: number
+          sale_incentive: number
           sort_order: number
           subsidy: number
         }
@@ -723,6 +738,7 @@ export type Database = {
           penalty?: number
           raid_id: string
           redistributed?: number
+          sale_incentive?: number
           sort_order?: number
           subsidy?: number
         }
@@ -740,6 +756,7 @@ export type Database = {
           penalty?: number
           raid_id?: string
           redistributed?: number
+          sale_incentive?: number
           sort_order?: number
           subsidy?: number
         }
@@ -780,7 +797,10 @@ export type Database = {
           phase_count: number
           ppoji_pct: number
           remainder_policy: Database["public"]["Enums"]["remainder_policy"]
+          sale_incentive_total: number
+          send_count: number
           sent: boolean
+          sent_at: string | null
           status: Database["public"]["Enums"]["raid_status"]
           subsidy_total: number
           total_sales: number
@@ -805,7 +825,10 @@ export type Database = {
           phase_count?: number
           ppoji_pct?: number
           remainder_policy?: Database["public"]["Enums"]["remainder_policy"]
+          sale_incentive_total?: number
+          send_count?: number
           sent?: boolean
+          sent_at?: string | null
           status?: Database["public"]["Enums"]["raid_status"]
           subsidy_total?: number
           total_sales?: number
@@ -830,7 +853,10 @@ export type Database = {
           phase_count?: number
           ppoji_pct?: number
           remainder_policy?: Database["public"]["Enums"]["remainder_policy"]
+          sale_incentive_total?: number
+          send_count?: number
           sent?: boolean
+          sent_at?: string | null
           status?: Database["public"]["Enums"]["raid_status"]
           subsidy_total?: number
           total_sales?: number
@@ -911,7 +937,10 @@ export type Database = {
           phase_count: number
           ppoji_pct: number
           remainder_policy: Database["public"]["Enums"]["remainder_policy"]
+          sale_incentive_total: number
+          send_count: number
           sent: boolean
+          sent_at: string | null
           status: Database["public"]["Enums"]["raid_status"]
           subsidy_total: number
           total_sales: number
@@ -1009,7 +1038,10 @@ export type Database = {
           phase_count: number
           ppoji_pct: number
           remainder_policy: Database["public"]["Enums"]["remainder_policy"]
+          sale_incentive_total: number
+          send_count: number
           sent: boolean
+          sent_at: string | null
           status: Database["public"]["Enums"]["raid_status"]
           subsidy_total: number
           total_sales: number
@@ -1194,3 +1226,4 @@ export const Constants = {
     },
   },
 } as const
+

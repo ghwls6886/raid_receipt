@@ -3,13 +3,27 @@
  *
  *   실수익      = Σ(판매가 - 판매가 × 수수료%)   ← 경매장 수수료 등
  *   순수익      = 실수익 - 공대경비
- *   공대장 인센티브  = 순수익 × 인센티브%              (순수익이 양수일 때만)
- *   분배 대상액  = 순수익 - 인센티브
+ *   판매 인센티브 = Σ(드랍템 실수익 × 판매 인센티브%)  ← 그 아이템을 판 사람 몫
+ *   판매 후 이익 = 순수익 - 판매 인센티브
+ *   공대장 인센티브  = 판매 후 이익 × 인센티브%        (양수일 때만)
+ *   분배 대상액  = 판매 후 이익 - 공대장 인센티브
  *   n빵 대상액   = 분배 대상액 - 역할 지원금
  *   기본 1인당   = n빵 대상액 / 참여인원
  *
  * 용병도 n빵을 치므로 별도 비용 항목이 아니라 참여자로 들어온다. 소모품·입장료 등
  * "쓴 돈"은 공대 경비(expenseTotal) 하나로 합쳐 순수익에서 차감한다.
+ *
+ * 판매 인센티브는 드랍템을 대신 팔아준 사람에게 주는 수고비다. 드랍템 **행마다**
+ * 판매자와 %를 따로 정하므로 아이템별로 다른 사람·다른 요율이 될 수 있다.
+ *
+ *   - % 기준은 **그 행의 실수익(판매가 - 수수료)** 이다. 순수익 기준으로 잡으면 다른
+ *     아이템의 판매가나 공대 경비에 따라 같은 "5%"가 다른 금액이 되어 설명이 안 된다.
+ *   - 공대장 인센티브보다 **먼저** 뗀다. 판매 수고비는 실비에 가까워 공대장을 포함한
+ *     전원이 부담하는 게 맞고, 나중에 떼면 공대장만 부담을 피하게 된다.
+ *   - 판매자가 참여자 명단에 없으면 아예 떼지 않는다 — 공대장 인센티브와 같은 규칙이다.
+ *     떼기만 하고 수령자가 없으면 그 돈이 "누구 것도 아닌 금액"이 되어 영수증이 안 맞는다.
+ *   - 몰수 대상자가 판매자여도 지급한다. 판매는 노동의 대가라 분배 몫과 축이 다르다.
+ *   - 합계가 순수익을 넘으면(경비가 큰 레이드) 비례 축소한다.
  *
  * 역할 지원금(보우마스터 샤프아이즈·비숍 부활 등)은 특정 역할을 맡은 참여자에게 n빵 전에
  * 먼저 떼어주는 몫이다. 공대장 인센티브를 뗀 **뒤**에 차감하므로 공대장 몫은 줄지 않고 공대원
@@ -47,6 +61,13 @@ export interface SettlementDrop {
   salePrice: number;
   /** 판매 수수료 % (0~100). 직거래 등 수수료가 없으면 0 */
   feePct?: number;
+  /**
+   * 이 아이템을 판 사람 (참여자 id). null/undefined 면 판매 인센티브를 떼지 않는다.
+   * 참여자 명단에 없는 id 도 같은 취급이다 — 줄 사람이 없는 돈은 떼지 않는다.
+   */
+  sellerId?: string | null;
+  /** 판매 인센티브 % (0~100). 이 행의 실수익 기준 */
+  incentivePct?: number;
 }
 
 export interface SettlementPenalty {
@@ -94,6 +115,8 @@ export interface ParticipantResult {
   redistributed: number;
   /** 공대장 인센티브 수령액 (공대장만 > 0) */
   incentive: number;
+  /** 드랍템 판매 인센티브 수령액. 여러 아이템을 팔았으면 합산된다 */
+  saleIncentive: number;
   /** 잔돈 재분배 수령액 — 수령자 없는 벌금·몰수 지원금·끝전을 되돌려준 몫 */
   leftoverShare: number;
   /** 최종 수령액 */
@@ -112,8 +135,20 @@ export interface SettlementResult {
   /** 공대 경비 합계 */
   expenseTotal: number;
   netProfit: number;
+  /** 드랍템 판매 인센티브 합계 (비례 축소 후 · 실제 지급되는 금액) */
+  saleIncentiveTotal: number;
+  /**
+   * 드랍템 행별 판매 인센티브 (input.drops 와 같은 순서·길이).
+   * 판매자가 없거나 명단에 없으면 0. 확정 영수증 스냅샷과 화면 표기가 이 값을 쓴다 —
+   * %만으로 다시 계산하면 비례 축소가 걸린 경우 합계와 어긋난다.
+   */
+  dropSaleIncentives: number[];
+  /** 판매 인센티브 합계가 순수익을 넘어 비례 축소됐는지 — UI 경고용 */
+  saleIncentiveCapped: boolean;
+  /** 순수익 - 판매 인센티브. 공대장 인센티브의 기준액 */
+  netAfterSaleIncentive: number;
   leaderPpoji: number;
-  /** 참여자에게 분배되는 총액 (순수익 - 인센티브) */
+  /** 참여자에게 분배되는 총액 (판매 후 이익 - 공대장 인센티브) */
   distributable: number;
   /** 분배 대상액에서 뗀 역할 지원금 총액 (비례 축소 후 기준) */
   subsidyTotal: number;
@@ -146,8 +181,7 @@ export interface SettlementResult {
 /** 완주자의 이탈 서열 — 누구보다도 오래 남았다는 뜻 */
 const CLEARED_RANK = Number.POSITIVE_INFINITY;
 
-const sum = (xs: number[]): number =>
-  xs.reduce((acc, v) => acc + (Number.isFinite(v) ? v : 0), 0);
+const sum = (xs: number[]): number => xs.reduce((acc, v) => acc + (Number.isFinite(v) ? v : 0), 0);
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
@@ -248,13 +282,50 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
   const expenseTotal = Math.max(0, input.expenseTotal || 0);
 
   const netProfit = totalSales - expenseTotal;
+
+  // ── 드랍템 판매 인센티브 ──
+  // 참여자 명단에 있는 판매자만 인정한다. 명단에 없는 id 는 UI 에서 참여자를 뺐는데
+  // 드랍템 행에 판매자가 남은 경우로, 줄 사람이 없으니 떼지 않는다.
+  const indexById = new Map(input.participants.map((p, i) => [p.id, i]));
+  const n = input.participants.length;
+  // 드랍템 행별로 먼저 구한다. 확정 스냅샷이 행 단위라 사람 단위 합계만으로는 부족하다.
+  const requestedDropIncentives = input.drops.map((d) => {
+    if (d.sellerId == null || !indexById.has(d.sellerId)) return 0;
+    const price = Math.max(0, d.salePrice || 0);
+    const fee = Math.floor((price * clamp(d.feePct ?? 0, 0, 100)) / 100);
+    return Math.floor(((price - fee) * clamp(d.incentivePct ?? 0, 0, 100)) / 100);
+  });
+  const requestedSaleTotal = sum(requestedDropIncentives);
+  // 경비가 커서 순수익이 판매 인센티브보다 작으면 비례 축소한다. 그대로 두면
+  // 분배 대상액이 음수가 되어 전원 마이너스 수령이 된다 (지원금과 같은 처리).
+  const saleIncentiveCap = Math.max(0, netProfit);
+  const saleIncentiveCapped = requestedSaleTotal > saleIncentiveCap;
+  const dropSaleIncentives = saleIncentiveCapped
+    ? requestedDropIncentives.map((v) => Math.floor((v * saleIncentiveCap) / requestedSaleTotal))
+    : requestedDropIncentives;
+
+  // 행별 금액을 판매자에게 합산한다. 한 사람이 여러 아이템을 팔았을 수 있다.
+  const saleIncentives = new Array<number>(n).fill(0);
+  input.drops.forEach((d, i) => {
+    const amount = dropSaleIncentives[i] ?? 0;
+    if (amount <= 0 || d.sellerId == null) return;
+    const seller = indexById.get(d.sellerId);
+    if (seller === undefined) return;
+    saleIncentives[seller] = (saleIncentives[seller] ?? 0) + amount;
+  });
+  const saleIncentiveTotal = sum(saleIncentives);
+  const netAfterSaleIncentive = netProfit - saleIncentiveTotal;
+
   const rate = clamp(input.ppojiRate || 0, 0, 1);
   // 받을 사람(공대장)이 지정되지 않았으면 아예 떼지 않는다. 떼기만 하고 수령자가 없으면
   // 그 돈이 잔돈으로 흘러 "누구 것도 아닌 금액"이 되어 영수증 설명이 안 된다.
   const leaderIndex = input.participants.findIndex((p) => p.isLeader);
   const hasLeader = leaderIndex >= 0;
-  const leaderPpoji = hasLeader && netProfit > 0 ? Math.floor(netProfit * rate) : 0;
-  const distributable = netProfit - leaderPpoji;
+  // 판매 인센티브를 뗀 뒤가 기준이다. 순수익 기준으로 잡으면 공대장만 판매 수고비를
+  // 부담하지 않게 되어, 공대원 몫만 줄고 공대장 몫은 그대로인 결과가 나온다.
+  const leaderPpoji =
+    hasLeader && netAfterSaleIncentive > 0 ? Math.floor(netAfterSaleIncentive * rate) : 0;
+  const distributable = netAfterSaleIncentive - leaderPpoji;
 
   // 역할 지원금은 n빵 전에 분배 대상액에서 뗀다. 합계가 분배 대상액을 넘으면
   // 기본 1인당이 음수가 되므로 비례 축소한다 (전원 마이너스 수령 방지).
@@ -276,7 +347,6 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
   const subsidyTotal = sum(subsidies);
   const distributableAfterSubsidy = distributable - subsidyTotal;
 
-  const n = input.participants.length;
   const basePerPerson = n > 0 ? Math.floor(distributableAfterSubsidy / n) : 0;
   const baseRemainder = n > 0 ? distributableAfterSubsidy - basePerPerson * n : 0;
 
@@ -342,6 +412,8 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
     const subsidy = paidSubsidies[i] ?? 0;
     const incentive = i === leaderIndex ? leaderPpoji : 0;
     const leftoverShare = leftoverShares[i] ?? 0;
+    // 몰수 대상자에게도 지급한다 — 판매는 노동의 대가라 분배 몫과 축이 다르다.
+    const saleIncentive = saleIncentives[i] ?? 0;
     return {
       id: p.id,
       base: basePerPerson,
@@ -349,8 +421,9 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
       penalty,
       redistributed: gained,
       incentive,
+      saleIncentive,
       leftoverShare,
-      final: basePerPerson + subsidy - penalty + gained + incentive + leftoverShare,
+      final: basePerPerson + subsidy - penalty + gained + incentive + saleIncentive + leftoverShare,
       forfeited: forfeited[i] ?? false,
     };
   });
@@ -363,6 +436,9 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
       !p.isLeader &&
       !p.penalties?.length &&
       !p.subsidies?.length &&
+      // 판매 인센티브를 받은 사람도 제외한다. 공대장·지원금 수령자와 같은 이유로
+      // 대표값이 부풀려져 "1인당"이 실제보다 크게 보인다.
+      (saleIncentives[i] ?? 0) === 0 &&
       p.exitPhase == null &&
       !forfeited[i],
   );
@@ -375,6 +451,10 @@ export function calcSettlement(input: SettlementInput): SettlementResult {
     totalSales,
     expenseTotal,
     netProfit,
+    saleIncentiveTotal,
+    dropSaleIncentives,
+    saleIncentiveCapped,
+    netAfterSaleIncentive,
     leaderPpoji,
     distributable,
     subsidyTotal,

@@ -65,6 +65,13 @@ interface DropRow {
   salePrice: number;
   /** 판매 수수료 % (경매장 등). 직거래면 0 */
   feePct: number;
+  /**
+   * 이 아이템을 판 사람 (참여자 행 id). 미지정이면 판매 인센티브를 떼지 않는다.
+   * 참여자에서 빠진 사람이 남아 있어도 settlement.ts 가 무시한다.
+   */
+  sellerId: string | null;
+  /** 판매 인센티브 % (0~100). 이 행의 실수익(판매가 - 수수료) 기준 */
+  incentivePct: number;
 }
 interface ExpenseRow {
   id: string;
@@ -83,6 +90,16 @@ interface ParticipantRow {
 
 let localSeq = 0;
 const localId = (): string => `local_${(localSeq += 1)}`;
+
+/** 드랍템 행 기본값 — 새 행·초기화·복제가 같은 모양에서 시작하도록 한곳에 둔다 */
+const emptyDrop = (feePct = 0): DropRow => ({
+  id: localId(),
+  name: '',
+  salePrice: 0,
+  feePct,
+  sellerId: null,
+  incentivePct: 0,
+});
 
 let guestSeq = 0;
 /** 공대원 id(`m1`…)와 절대 겹치지 않도록 prefix 를 분리 */
@@ -194,9 +211,7 @@ export function RaidNewPage() {
   /** 이탈 시점 셀렉트에 그릴 페이즈 개수. 모자라면 그 자리에서 늘린다 */
   const [phaseCount, setPhaseCount] = useState(DEFAULT_PHASE_COUNT);
   const [feePctTouched, setFeePctTouched] = useState(false);
-  const [drops, setDrops] = useState<DropRow[]>([
-    { id: localId(), name: '', salePrice: 0, feePct: 0 },
-  ]);
+  const [drops, setDrops] = useState<DropRow[]>([emptyDrop()]);
   const [remainderPolicy, setRemainderPolicy] = useState<RemainderPolicy>('fund');
   const [loadedPartyName, setLoadedPartyName] = useState<string | null>(null);
   /**
@@ -277,23 +292,14 @@ export function RaidNewPage() {
     setExpenses(
       d.expenses.map((e) => ({ id: localId(), category: e.category, name: e.name, cost: e.cost })),
     );
-    setDrops(
-      d.drops.length > 0
-        ? d.drops.map((x) => ({
-            id: localId(),
-            name: x.name,
-            salePrice: x.salePrice,
-            feePct: x.feePct,
-          }))
-        : [{ id: localId(), name: '', salePrice: 0, feePct: 0 }],
-    );
-
     // 공대원/임시 용병을 갈라 담고, 패널티·이탈 페이즈는 각자의 key 로 다시 건다
     const memberIds: string[] = [];
     const restoredGuests: GuestRow[] = [];
     const penaltyEntries: Array<[string, string[]]> = [];
     const subsidyEntries: Array<[string, string[]]> = [];
     const exitEntries: Array<[string, number]> = [];
+    /** 용병 판매자를 되살리기 위한 이름 → 새 행 id. 용병 행 id 는 매번 새로 만들어진다 */
+    const guestRowIdByName = new Map<string, string>();
     let restoredLeader: string | null = null;
     for (const p of d.participants) {
       let key: string;
@@ -303,6 +309,7 @@ export function RaidNewPage() {
       } else {
         const g: GuestRow = { id: guestId(), name: p.guestName ?? '' };
         restoredGuests.push(g);
+        guestRowIdByName.set(g.name, g.id);
         key = g.id;
       }
       if (p.isLeader) restoredLeader = key;
@@ -318,6 +325,25 @@ export function RaidNewPage() {
     setSubsidyBy(Object.fromEntries(subsidyEntries));
     setExitPhaseBy(Object.fromEntries(exitEntries));
     setLeaderRowId(restoredLeader);
+
+    // 드랍템은 참여자를 다 훑은 뒤에 복원한다. 판매자가 용병이면 이름밖에 저장돼 있지
+    // 않아서, 위에서 새로 만든 용병 행 id 로 바꿔 줘야 셀렉트가 그 사람을 가리킨다.
+    setDrops(
+      d.drops.length > 0
+        ? d.drops.map((x) => ({
+            id: localId(),
+            name: x.name,
+            salePrice: x.salePrice,
+            feePct: x.feePct,
+            sellerId:
+              x.sellerMemberId ??
+              (x.sellerGuestName != null
+                ? (guestRowIdByName.get(x.sellerGuestName) ?? null)
+                : null),
+            incentivePct: x.incentivePct,
+          }))
+        : [emptyDrop()],
+    );
   }, [isEdit, detailQuery.data]);
 
   const members = membersQuery.data ?? [];
@@ -400,7 +426,12 @@ export function RaidNewPage() {
   const result = useMemo(
     () =>
       calcSettlement({
-        drops: drops.map((d) => ({ salePrice: d.salePrice || 0, feePct: d.feePct || 0 })),
+        drops: drops.map((d) => ({
+          salePrice: d.salePrice || 0,
+          feePct: d.feePct || 0,
+          sellerId: d.sellerId,
+          incentivePct: d.incentivePct || 0,
+        })),
         expenseTotal,
         participants: participantsInput,
         ppojiRate: (ppojiPct || 0) / 100,
@@ -425,7 +456,19 @@ export function RaidNewPage() {
     ppojiPct,
     remainderPolicy,
     phaseCount,
-    drops: drops.map((d) => ({ name: d.name, salePrice: d.salePrice, feePct: d.feePct })),
+    drops: drops.map((d) => {
+      // 화면은 참여자 행 id 하나로 다루지만 저장은 길드원/용병으로 갈라야 한다.
+      // 참여자에서 빠진 사람이 남아 있으면 판매자 없이 저장한다 — 줄 사람이 없는 몫이다.
+      const seller = participantRows.find((p) => p.id === d.sellerId);
+      return {
+        name: d.name,
+        salePrice: d.salePrice,
+        feePct: d.feePct,
+        sellerMemberId: seller && !seller.isGuest ? seller.id : null,
+        sellerGuestName: seller?.isGuest ? seller.name : null,
+        incentivePct: d.incentivePct,
+      };
+    }),
     expenses: expenses.map((e) => ({ category: e.category, name: e.name, cost: e.cost })),
     participants: participantRows.map((row) => ({
       memberId: row.isGuest ? null : row.id,
@@ -587,12 +630,7 @@ export function RaidNewPage() {
     setDrops((prev) => [
       ...prev,
       // 새 행도 길드 기본 수수료율로 시작 (직거래면 그 행만 0으로 고치면 된다)
-      {
-        id: localId(),
-        name: '',
-        salePrice: 0,
-        feePct: prev[prev.length - 1]?.feePct ?? defaultFeePct,
-      },
+      emptyDrop(prev[prev.length - 1]?.feePct ?? defaultFeePct),
     ]);
   const updateDrop = (id: string, patch: Partial<DropRow>) =>
     setDrops((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch } : d)));
@@ -623,7 +661,7 @@ export function RaidNewPage() {
     setExitPhaseBy({});
     setLeaderRowId(null);
     setLoadedPartyName(last.partyName);
-    setDrops([{ id: localId(), name: '', salePrice: 0, feePct: defaultFeePct }]);
+    setDrops([emptyDrop(defaultFeePct)]);
     setPhaseCount(DEFAULT_PHASE_COUNT);
     toast.success('직전 레이드를 복제했습니다. 판매가만 입력하세요.');
   };
@@ -669,15 +707,23 @@ export function RaidNewPage() {
 
     setPending(true);
     try {
-      await saveRaid(guild.id, buildInput(status, draftId));
+      const saved = await saveRaid(guild.id, buildInput(status, draftId));
       // 확정이 끝난 순간 자동저장을 끈다. 이 아래(무효화·토스트·이동)에서 뭐라도 실패해
       // 화면에 머무르게 되면, 이미 CONFIRMED 가 된 레이드에 자동저장이 계속 달라붙는다.
       if (status === 'confirmed') setWasConfirmed(true);
       await queryClient.invalidateQueries({ queryKey: ['raids', guild.id] });
       await queryClient.invalidateQueries({ queryKey: ['dashboard-stats', guild.id] });
-      // 디스코드 발송은 실패해도 확정을 되돌리지 않으므로 "발송했습니다" 라고 단정하지
-      // 않는다. 실제 발송 여부는 레이드 목록의 발송/미발송 배지가 보여 준다.
-      toast.success(status === 'confirmed' ? '확정되었습니다.' : '임시저장되었습니다.');
+      // 발송 실패는 확정을 되돌리지 않는다. 그래도 조용히 넘어가면 사용자는 영수증이
+      // 나간 줄 알고 화면을 뜬다. 저장된 sent 를 보고 사실대로 알린다.
+      if (status !== 'confirmed') {
+        toast.success('임시저장되었습니다.');
+      } else if (saved.sent) {
+        toast.success('확정되었습니다. 디스코드로 영수증을 발송했습니다.');
+      } else {
+        toast.warning(
+          '확정되었습니다. 다만 디스코드 발송에 실패했습니다 — 레이드 목록에서 재발송할 수 있습니다.',
+        );
+      }
       navigate('/raids');
     } catch (e) {
       // 사유를 삼키면 사용자는 "안 된다" 고만 하고 원인을 좁힐 수 없다. RPC 메시지를 붙인다.
@@ -992,68 +1038,128 @@ export function RaidNewPage() {
                 <Plus className="h-4 w-4" /> 드랍템 추가
               </Button>
             </div>
-            <div className="space-y-2">
-              {drops.map((d) => {
+            <div className="divide-border-subtle divide-y">
+              {drops.map((d, di) => {
                 const fee = Math.floor(
                   (Math.max(0, d.salePrice) * Math.min(Math.max(d.feePct, 0), 100)) / 100,
                 );
+                // 비례 축소까지 반영된 실제 지급액. %로 다시 계산하면 합계와 어긋난다.
+                const saleIncentive = result.dropSaleIncentives[di] ?? 0;
+                const sellerMissing =
+                  d.sellerId !== null && !participantRows.some((p) => p.id === d.sellerId);
                 return (
-                  <div key={d.id} className="flex items-center gap-2">
-                    <Input
-                      placeholder="드랍템 이름 (예: 이지스)"
-                      value={d.name}
-                      onChange={(e) => updateDrop(d.id, { name: e.target.value })}
-                      className="min-w-0 flex-1"
-                    />
-                    <MoneyInput
-                      placeholder="판매가(메소)"
-                      value={d.salePrice}
-                      onChange={(salePrice) => updateDrop(d.id, { salePrice })}
-                      className="w-36 shrink-0"
-                    />
-                    <div className="relative w-20 shrink-0">
+                  <div key={d.id} className="space-y-2 py-2 first:pt-0 last:pb-0">
+                    <div className="flex items-center gap-2">
                       <Input
-                        type="number"
-                        min={0}
-                        max={100}
-                        aria-label="판매 수수료 %"
-                        className="pr-6 text-right"
-                        value={d.feePct}
-                        onChange={(e) => {
-                          setFeePctTouched(true);
-                          updateDrop(d.id, { feePct: Number(e.target.value) || 0 });
-                        }}
+                        placeholder="드랍템 이름 (예: 이지스)"
+                        value={d.name}
+                        onChange={(e) => updateDrop(d.id, { name: e.target.value })}
+                        className="min-w-0 flex-1"
                       />
-                      <span className="text-text-tertiary pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs">
-                        %
-                      </span>
-                    </div>
-                    <div className="w-36 shrink-0 text-right">
-                      <div className="text-text-primary text-sm font-semibold tabular-nums">
-                        {formatMeso(d.salePrice - fee)}
+                      <MoneyInput
+                        placeholder="판매가(메소)"
+                        value={d.salePrice}
+                        onChange={(salePrice) => updateDrop(d.id, { salePrice })}
+                        className="w-36 shrink-0"
+                      />
+                      <div className="relative w-20 shrink-0">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          aria-label="판매 수수료 %"
+                          className="pr-6 text-right"
+                          value={d.feePct}
+                          onChange={(e) => {
+                            setFeePctTouched(true);
+                            updateDrop(d.id, { feePct: Number(e.target.value) || 0 });
+                          }}
+                        />
+                        <span className="text-text-tertiary pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs">
+                          %
+                        </span>
                       </div>
-                      {fee > 0 && (
-                        <div className="text-text-tertiary text-xs tabular-nums">
-                          수수료 −{formatMeso(fee)}
+                      <div className="w-36 shrink-0 text-right">
+                        <div className="text-text-primary text-sm font-semibold tabular-nums">
+                          {formatMeso(d.salePrice - fee)}
                         </div>
+                        {fee > 0 && (
+                          <div className="text-text-tertiary text-xs tabular-nums">
+                            수수료 −{formatMeso(fee)}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        aria-label="드랍템 삭제"
+                        className="text-text-muted hover:text-error-600 shrink-0 rounded-md p-2 disabled:opacity-40"
+                        onClick={() => removeDrop(d.id)}
+                        disabled={drops.length <= 1}
+                        type="button"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    {/* 판매 인센티브 — 이 아이템을 대신 팔아준 사람에게 주는 수고비.
+                      행마다 사람과 요율이 다를 수 있어 드랍템 행에 붙는다. */}
+                    <div className="flex flex-wrap items-center gap-2 pl-1">
+                      <span className="text-text-tertiary shrink-0 text-xs">판매자</span>
+                      <Select
+                        className="w-40 shrink-0"
+                        aria-label={`${d.name || '드랍템'} 판매자`}
+                        value={sellerMissing ? '' : (d.sellerId ?? '')}
+                        onChange={(e) =>
+                          updateDrop(d.id, {
+                            sellerId: e.target.value === '' ? null : e.target.value,
+                          })
+                        }
+                      >
+                        <option value="">지정 안 함</option>
+                        {participantRows.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </Select>
+                      <span className="text-text-tertiary shrink-0 text-xs">인센티브</span>
+                      <div className="relative w-20 shrink-0">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          aria-label="판매 인센티브 %"
+                          className="pr-6 text-right"
+                          disabled={d.sellerId === null}
+                          value={d.incentivePct}
+                          onChange={(e) =>
+                            updateDrop(d.id, { incentivePct: Number(e.target.value) || 0 })
+                          }
+                        />
+                        <span className="text-text-tertiary pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs">
+                          %
+                        </span>
+                      </div>
+                      {saleIncentive > 0 && (
+                        <span className="text-warning-600 text-xs font-medium tabular-nums">
+                          −{formatMeso(saleIncentive)}
+                        </span>
+                      )}
+                      {/* 참여자에서 빠졌는데 판매자로 남아 있으면 줄 사람이 없어 미지급된다.
+                        조용히 0 이 되면 순수익이 왜 늘었는지 알 수 없으므로 알려 준다. */}
+                      {sellerMissing && (
+                        <span className="text-error-600 text-xs">
+                          판매자가 참여자 명단에 없어 지급되지 않습니다
+                        </span>
                       )}
                     </div>
-                    <button
-                      aria-label="드랍템 삭제"
-                      className="text-text-muted hover:text-error-600 shrink-0 rounded-md p-2 disabled:opacity-40"
-                      onClick={() => removeDrop(d.id)}
-                      disabled={drops.length <= 1}
-                      type="button"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
                   </div>
                 );
               })}
             </div>
             <p className="text-text-tertiary text-xs">
               수수료는 길드 설정의 기본값({defaultFeePct}%)으로 채워집니다. 직거래처럼 수수료가 없는
-              건은 그 행만 0으로 바꾸세요.
+              건은 그 행만 0으로 바꾸세요. 판매 인센티브는 그 행의 실수익(판매가−수수료) 기준이며
+              순수익에서 먼저 빠집니다.
             </p>
           </Card>
 
@@ -1115,55 +1221,63 @@ export function RaidNewPage() {
                           <span
                             className={cn(
                               'block font-semibold tabular-nums',
-                              pr.forfeited ? 'text-error-600' : 'text-text-primary',
+                              pr.forfeited && pr.final <= 0
+                                ? 'text-error-600'
+                                : 'text-text-primary',
                             )}
                           >
-                            {pr.forfeited ? '몰수' : formatMeso(pr.final)}
+                            {/* 몰수라도 판매 인센티브가 있으면 받는 돈이 있다.
+                                "몰수" 로만 적으면 실제 지급액과 어긋난다. */}
+                            {pr.forfeited && pr.final <= 0 ? '몰수' : formatMeso(pr.final)}
                           </span>
-                          {pr.forfeited ? (
-                            <span className="text-text-tertiary block text-xs">
-                              {(subsidyBy[row.id] ?? []).length > 0
-                                ? '재분배·지원금 수령 없음'
-                                : '재분배 수령 없음'}
+                          {pr.forfeited && (
+                            <span className="text-error-600 block text-xs">
+                              몰수 ·{' '}
+                              {(subsidyBy[row.id] ?? []).length > 0 ? '재분배·지원금' : '재분배'}{' '}
+                              수령 없음
                             </span>
-                          ) : (
-                            (pr.penalty > 0 ||
-                              pr.redistributed > 0 ||
-                              pr.subsidy > 0 ||
-                              pr.incentive > 0 ||
-                              pr.leftoverShare > 0) && (
-                              <span className="block text-xs tabular-nums">
-                                {/* 공대장 금액이 왜 큰지 여기서 설명돼야 한다 */}
-                                {pr.incentive > 0 && (
-                                  <span className="text-warning-600">
-                                    인센 +{formatMeso(pr.incentive)}
-                                  </span>
-                                )}
-                                {pr.subsidy > 0 && (
-                                  <span className="text-brand-600 ml-1">
-                                    지원 +{formatMeso(pr.subsidy)}
-                                  </span>
-                                )}
-                                {pr.penalty > 0 && (
-                                  <span className="text-error-600 ml-1">
-                                    −{formatMeso(pr.penalty)}
-                                  </span>
-                                )}
-                                {pr.redistributed > 0 && (
-                                  <span className="text-success-600 ml-1">
-                                    +{formatMeso(pr.redistributed)}
-                                  </span>
-                                )}
-                                {pr.leftoverShare > 0 && (
-                                  <span className="text-text-tertiary ml-1">
-                                    잔돈 +{formatMeso(pr.leftoverShare)}
-                                  </span>
-                                )}
-                              </span>
-                            )
                           )}
                         </span>
                       </div>
+
+                      {/* 금액 내역 — 이름 줄의 좁은 칸에 넣으면 항목이 늘 때마다 찌그러진다.
+                          한 줄을 통째로 내주고 오른쪽 정렬해 최종액 아래에 붙어 보이게 한다. */}
+                      {(pr.penalty > 0 ||
+                        pr.redistributed > 0 ||
+                        pr.subsidy > 0 ||
+                        pr.incentive > 0 ||
+                        pr.saleIncentive > 0 ||
+                        pr.leftoverShare > 0) && (
+                        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-xs tabular-nums">
+                          {/* 공대장 금액이 왜 큰지 여기서 설명돼야 한다 */}
+                          {pr.incentive > 0 && (
+                            <span className="text-warning-600">
+                              공대장 인센 +{formatMeso(pr.incentive)}
+                            </span>
+                          )}
+                          {pr.saleIncentive > 0 && (
+                            <span className="text-warning-600">
+                              판매 인센 +{formatMeso(pr.saleIncentive)}
+                            </span>
+                          )}
+                          {pr.subsidy > 0 && (
+                            <span className="text-brand-600">지원금 +{formatMeso(pr.subsidy)}</span>
+                          )}
+                          {pr.penalty > 0 && (
+                            <span className="text-error-600">패널티 −{formatMeso(pr.penalty)}</span>
+                          )}
+                          {pr.redistributed > 0 && (
+                            <span className="text-success-600">
+                              재분배 +{formatMeso(pr.redistributed)}
+                            </span>
+                          )}
+                          {pr.leftoverShare > 0 && (
+                            <span className="text-text-tertiary">
+                              잔돈 +{formatMeso(pr.leftoverShare)}
+                            </span>
+                          )}
+                        </div>
+                      )}
 
                       {/* 패널티 칩 — 여러 개 동시 선택 가능 */}
                       {penaltyTypes.length > 0 && (
@@ -1278,6 +1392,14 @@ export function RaidNewPage() {
               <SummaryRow label="− 공대 경비" value={-result.expenseTotal} muted />
               <div className="border-border-subtle my-2 border-t" />
               <SummaryRow label="순수익" value={result.netProfit} strong />
+              {/* 판매 인센티브는 공대장 인센티브보다 먼저 뗀다 — settlement.ts 참고.
+                  안 쓰는 길드가 대부분이라 0 이면 줄을 만들지 않는다. */}
+              {result.saleIncentiveTotal > 0 && (
+                <>
+                  <SummaryRow label="− 판매 인센티브" value={-result.saleIncentiveTotal} muted />
+                  <SummaryRow label="판매 후 이익" value={result.netAfterSaleIncentive} strong />
+                </>
+              )}
               <SummaryRow
                 label={`− 공대장 인센티브 (${ppojiPct}%)`}
                 value={-result.leaderPpoji}
@@ -1318,6 +1440,14 @@ export function RaidNewPage() {
               )}
             </div>
 
+            {result.saleIncentiveCapped && (
+              <div className="bg-warning-500/10 text-warning-600 mt-3 rounded-lg p-3 text-xs leading-relaxed">
+                판매 인센티브 합계가 순수익({formatMeso(result.netProfit)} 메소)을 넘어{' '}
+                <b>비례 축소</b>되었습니다. 공대 경비가 판매금액에 비해 크거나 인센티브율이
+                높습니다.
+              </div>
+            )}
+
             {result.subsidyCapped && (
               <div className="bg-warning-500/10 text-warning-600 mt-3 rounded-lg p-3 text-xs leading-relaxed">
                 역할 지원금 합계가 분배 대상액(
@@ -1328,7 +1458,8 @@ export function RaidNewPage() {
 
             <div className="mt-3">
               <p className="text-text-tertiary text-xs leading-relaxed">
-                남는 돈은 따로 빼두지 않고 <b className="text-text-secondary">참여자에게 다시 n빵</b>
+                남는 돈은 따로 빼두지 않고{' '}
+                <b className="text-text-secondary">참여자에게 다시 n빵</b>
                 합니다. (몰수 대상자 제외)
                 {hasPenalty && (
                   <>

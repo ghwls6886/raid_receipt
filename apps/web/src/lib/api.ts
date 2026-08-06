@@ -28,7 +28,12 @@ export interface RaidRow {
   participantCount: number;
   perPerson: number;
   status: RaidStatus;
+  /** 마지막 발송이 성공했는지. 재발송이 가능하므로 "보낸 적 있음"과는 다르다 */
   sent: boolean;
+  /** 마지막 발송 성공 시각 (ISO). 한 번도 못 보냈으면 null */
+  sentAt: string | null;
+  /** 누적 발송 횟수 (재발송 포함). 0011 이전 발송 건은 1 로 백필됐다 */
+  sendCount: number;
   /** 작성자 계정 id. 0009 이전 레이드는 null(주인 없음) */
   createdBy: string | null;
   /** 작성 시점 이름 스냅샷 — 계정이 삭제돼도 남는다 */
@@ -46,7 +51,7 @@ export async function getRaids(guildId: string): Promise<RaidRow[]> {
   const { data, error } = await supabase
     .from('raids')
     .select(
-      'id, date, boss_name, party_name, net_profit, participant_count, per_person, status, sent, created_by, created_by_name',
+      'id, date, boss_name, party_name, net_profit, participant_count, per_person, status, sent, sent_at, send_count, created_by, created_by_name',
     )
     .eq('guild_id', guildId)
     .order('date', { ascending: false });
@@ -61,6 +66,8 @@ export async function getRaids(guildId: string): Promise<RaidRow[]> {
     perPerson: r.per_person,
     status: r.status.toLowerCase() as RaidStatus,
     sent: r.sent,
+    sentAt: r.sent_at,
+    sendCount: r.send_count,
     createdBy: r.created_by,
     createdByName: r.created_by_name,
   }));
@@ -70,7 +77,7 @@ export async function getRaid(guildId: string, raidId: string): Promise<RaidRow 
   const { data, error } = await supabase
     .from('raids')
     .select(
-      'id, date, boss_name, party_name, net_profit, participant_count, per_person, status, sent, created_by, created_by_name',
+      'id, date, boss_name, party_name, net_profit, participant_count, per_person, status, sent, sent_at, send_count, created_by, created_by_name',
     )
     .eq('guild_id', guildId)
     .eq('id', raidId)
@@ -87,6 +94,8 @@ export async function getRaid(guildId: string, raidId: string): Promise<RaidRow 
     perPerson: data.per_person,
     status: data.status.toLowerCase() as RaidStatus,
     sent: data.sent,
+    sentAt: data.sent_at,
+    sendCount: data.send_count,
     createdBy: data.created_by,
     createdByName: data.created_by_name,
   };
@@ -437,6 +446,15 @@ export interface RaidDrop {
   name: string;
   salePrice: number;
   feePct: number;
+  /**
+   * 이 아이템을 판 사람. 참여자와 같은 방식으로 가리킨다 (길드원 id 또는 용병 이름).
+   * raid_participants 를 참조하지 않는 이유는 save_raid 가 저장할 때마다 참여자 행을
+   * 지우고 다시 넣어 id 가 매번 바뀌기 때문이다 (0011 주석).
+   */
+  sellerMemberId: string | null;
+  sellerGuestName: string | null;
+  /** 판매 인센티브 % (0~100). 이 행의 실수익(판매가 - 수수료) 기준 */
+  incentivePct: number;
 }
 
 export type ExpenseCategory = 'consumable' | 'entry' | 'etc';
@@ -537,6 +555,33 @@ export function canDeleteRaid(raid: RaidRow, userId: string | null, role: Accoun
   return raid.createdBy !== null && raid.createdBy === userId;
 }
 
+/**
+ * 디스코드 영수증 발송 — 확정 직후와 재발송이 같은 경로를 쓴다.
+ *
+ * Edge Function 은 실패해도 HTTP 200 + `{ok:false}` 로 돌아오는 경우가 있어
+ * (웹훅 URL 미설정, 디스코드 4xx) invoke 의 error 만 보면 실패를 놓친다.
+ * 본문의 ok 까지 확인해야 "보냈다고 했는데 안 온" 상황을 잡을 수 있다.
+ */
+async function sendReceipt(guildId: string, raidId: string): Promise<void> {
+  const { data, error } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>(
+    'discord-send',
+    { body: { guildId, raidId } },
+  );
+  if (error) throw new Error(error.message);
+  if (!data?.ok) throw new Error(data?.error ?? '디스코드가 요청을 거절했습니다.');
+}
+
+/**
+ * 확정 건 영수증 재발송 — 정산 내용은 건드리지 않고 메시지만 다시 보낸다.
+ *
+ * 확정은 수정할 수 없으므로(save_raid 가 거부) 잘못 나간 발송을 고치는 유일한 수단이
+ * 재발송이다. 디스코드 메시지를 지웠거나 웹훅을 다른 채널로 바꾼 경우에도 쓴다.
+ * 권한은 Edge Function 이 길드 소속 여부로 판정한다.
+ */
+export async function resendReceipt(guildId: string, raidId: string): Promise<void> {
+  await sendReceipt(guildId, raidId);
+}
+
 /** 레이드 삭제 — 하위 행(드랍·지출·참여자)은 on delete cascade 로 같이 지워진다 */
 export async function deleteRaid(raidId: string): Promise<void> {
   const { error } = await supabase.rpc('delete_raid', { p_raid_id: raidId });
@@ -576,6 +621,9 @@ export async function getRaidDetail(raidId: string): Promise<RaidDetail | null> 
       name: d.name,
       salePrice: d.sale_price,
       feePct: d.fee_pct,
+      sellerMemberId: d.seller_member_id,
+      sellerGuestName: d.seller_guest_name,
+      incentivePct: d.incentive_pct,
     })),
     expenses: (expensesRes.data ?? []).map((e) => ({
       category: e.category.toLowerCase() as ExpenseCategory,
@@ -666,7 +714,8 @@ export async function saveRaid(guildId: string, input: RaidInput): Promise<RaidR
   // n빵 대상액이 커져 전원의 분배금이 틀린 영수증이 조용히 발송된다.
   const subsidyTypeIds = new Set(input.participants.flatMap((p) => p.subsidyTypeIds));
   // penaltyTypeMap 과 같은 규칙 — DB 원본(대문자)을 그대로 담고 쓰는 쪽에서 변환한다
-  const subsidyTypeMap: Map<string, { name: string; calc_type: string; amount: number }> = new Map();
+  const subsidyTypeMap: Map<string, { name: string; calc_type: string; amount: number }> =
+    new Map();
 
   if (subsidyTypeIds.size > 0) {
     const { data: stRows, error: stError } = await supabase
@@ -694,7 +743,14 @@ export async function saveRaid(guildId: string, input: RaidInput): Promise<RaidR
   // ── 2) 정산 재계산 ──
   const expenseTotal = input.expenses.reduce((sum, e) => sum + e.cost, 0);
   const settlement = calcSettlement({
-    drops: input.drops.map((d) => ({ salePrice: d.salePrice, feePct: d.feePct })),
+    drops: input.drops.map((d) => ({
+      salePrice: d.salePrice,
+      feePct: d.feePct,
+      // 참여자 id 와 같은 규칙으로 맞춘다 (아래 participants[].id 참고).
+      // 명단에 없는 판매자는 settlement.ts 가 알아서 무시한다.
+      sellerId: d.sellerMemberId ?? d.sellerGuestName ?? null,
+      incentivePct: d.incentivePct,
+    })),
     expenseTotal,
     participants: input.participants.map((p) => ({
       id: p.memberId ?? p.guestName ?? '',
@@ -731,16 +787,23 @@ export async function saveRaid(guildId: string, input: RaidInput): Promise<RaidR
     total_sales: settlement.totalSales,
     expense_total: settlement.expenseTotal,
     net_profit: settlement.netProfit,
+    sale_incentive_total: settlement.saleIncentiveTotal,
     leader_ppoji: settlement.leaderPpoji,
     subsidy_total: settlement.subsidyTotal,
     leftover: settlement.leftover,
     participant_count: settlement.participantCount,
     // 목록의 "1인당" 열이 작성 화면 헤드라인과 같은 값이어야 한다 (settlement.ts 참고)
     per_person: settlement.representativePerPerson,
-    drops: input.drops.map((d) => ({
+    drops: input.drops.map((d, i) => ({
       name: d.name,
       sale_price: d.salePrice,
       fee_pct: d.feePct,
+      seller_member_id: d.sellerMemberId,
+      seller_guest_name: d.sellerGuestName,
+      incentive_pct: d.incentivePct,
+      // %가 아니라 계산 결과를 남긴다. 비례 축소가 걸리면 %로 다시 계산한 값과
+      // 실제 지급액이 어긋나서, 나중에 영수증을 재현할 때 합계가 안 맞는다.
+      incentive_amount: settlement.dropSaleIncentives[i] ?? 0,
     })),
     expenses: input.expenses.map((e) => ({
       category: e.category.toUpperCase(),
@@ -758,6 +821,7 @@ export async function saveRaid(guildId: string, input: RaidInput): Promise<RaidR
         penalty: sr?.penalty ?? 0,
         redistributed: sr?.redistributed ?? 0,
         incentive: sr?.incentive ?? 0,
+        sale_incentive: sr?.saleIncentive ?? 0,
         leftover_share: sr?.leftoverShare ?? 0,
         is_leader: p.isLeader ?? false,
         final_amount: sr?.final ?? 0,
@@ -811,13 +875,13 @@ export async function saveRaid(guildId: string, input: RaidInput): Promise<RaidR
     const { error } = await supabase.rpc('confirm_settlement', { p_raid_id: raidId });
     if (error) throw new Error(error.message);
 
-    // 디스코드 영수증 발송 (실패해도 확정은 유지 — sent=false 로 남음)
+    // 발송 실패로 확정을 되돌리지는 않는다. 확정은 회계 사실이고 발송은 전달 수단이라
+    // 축이 다르다. 대신 삼키지 않는다 — 호출부가 반환된 raid.sent 로 실패를 알 수 있고,
+    // 실패한 건은 목록에서 재발송할 수 있다.
     try {
-      await supabase.functions.invoke('discord-send', {
-        body: { guildId, raidId },
-      });
+      await sendReceipt(guildId, raidId);
     } catch {
-      // 발송 실패는 무시 — 웹훅 미설정이거나 네트워크 오류
+      // sent=false 로 남으므로 아래 5)에서 읽히고, 호출부가 안내를 띄운다
     }
   }
 

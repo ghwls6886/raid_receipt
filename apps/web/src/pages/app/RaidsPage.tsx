@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { useCurrentGuild } from '@/stores/useGuildStore';
-import { deleteRaid, getRaids, type RaidRow } from '@/lib/api';
+import { deleteRaid, getRaids, resendReceipt, type RaidRow } from '@/lib/api';
 import { confirm } from '@/stores/useConfirmStore';
 import { toast } from '@/stores/useToastStore';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -139,11 +139,34 @@ export function RaidsPage() {
     }
   };
 
+  const onResend = async (row: RaidRow) => {
+    // 이미 보낸 건을 또 보내면 채널에 같은 영수증이 두 번 뜬다. 한 번 확인받는다.
+    const ok = await confirm.show({
+      title: row.sent ? '영수증 다시 보내기' : '영수증 발송',
+      message: row.sent
+        ? `${row.bossName} 영수증을 디스코드로 다시 보냅니다. 채널에 같은 내용이 한 번 더 올라갑니다.`
+        : `${row.bossName} 영수증을 디스코드로 발송합니다.`,
+      confirmText: row.sent ? '다시 보내기' : '발송',
+      type: 'default',
+    });
+    if (!ok) return;
+    try {
+      await resendReceipt(guild.id, row.id);
+      // 발송 배지·시각이 바뀌므로 목록을 다시 읽는다.
+      await queryClient.invalidateQueries({ queryKey: ['raids', guild.id] });
+      toast.success('디스코드로 발송했습니다.');
+    } catch (e: unknown) {
+      // 웹훅 미설정·디스코드 거절·권한 부족이 전부 여기로 온다. 사유를 그대로 보여준다.
+      const detail = e instanceof Error ? e.message : '';
+      toast.error(detail ? `발송에 실패했습니다. (${detail})` : '발송에 실패했습니다.');
+    }
+  };
+
   return (
     <div>
       <PageHeader
         title="레이드"
-        description="공대별 이력과 요약 · 임시저장/미발송 건은 수정, 임시저장 건은 삭제할 수 있습니다"
+        description="공대별 이력과 요약 · 임시저장 건은 수정·삭제, 확정 건은 영수증 재발송을 할 수 있습니다"
         actions={
           <Button onClick={() => navigate('/raids/new')}>
             <Plus className="h-4 w-4" /> 레이드 추가
@@ -230,7 +253,12 @@ export function RaidsPage() {
                 <h3 className="text-card-title">{g.name}</h3>
                 <span className="text-text-muted text-xs">{g.rows.length}회</span>
               </div>
-              <RaidTable rows={g.rows} onDelete={(r) => void onDelete(r)} onEdit={onEdit} />
+              <RaidTable
+                rows={g.rows}
+                onDelete={(r) => void onDelete(r)}
+                onEdit={onEdit}
+                onResend={(r) => void onResend(r)}
+              />
             </Card>
           ))}
         </div>
