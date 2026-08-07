@@ -9,6 +9,7 @@ import {
   ListChecks,
   Timer,
   Users,
+  Star,
   Settings,
   Moon,
   Sun,
@@ -51,6 +52,7 @@ const HELPER_NAV: readonly NavItem[] = [
   { to: '/checklist', label: '숙제', Icon: ListChecks, end: false },
   { to: '/boss-tracker', label: '보스 타이머', Icon: Timer, end: false },
   { to: '/recruit', label: '파티 구인', Icon: Users, end: false },
+  { to: '/ratings', label: '평가', Icon: Star, end: false },
 ];
 
 type ProductKey = 'settlement' | 'helper';

@@ -12,6 +12,8 @@ import {
   respondToApplication,
 } from '@/features/recruit/api';
 import { categoryLabel } from '@/features/recruit/constants';
+import { usePendingRatingSessions, useRatingSession } from '@/features/recruit/manner/hooks';
+import { RatingFlowModal } from '@/features/recruit/manner/RatingFlowModal';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { confirm } from '@/stores/useConfirmStore';
 import { toast } from '@/stores/useToastStore';
@@ -60,6 +62,14 @@ export function RecruitDetailPage() {
 
   const [isKicking, setIsKicking] = useState(false);
 
+  /** 평가 팝업에 띄울 세션 */
+  const [ratingSessionId, setRatingSessionId] = useState<string | null>(null);
+  /** 평가를 마친 뒤 목록으로 나갈지 — 퇴장시킨 파티장은 방에 남는다 */
+  const [leaveAfterRating, setLeaveAfterRating] = useState(false);
+
+  const { data: ratingSession } = useRatingSession(ratingSessionId);
+  const { data: pendingSessions = [] } = usePendingRatingSessions();
+
   const amMember = Boolean(myUserId) && members.some((m) => m.userId === myUserId);
   const isClosed = post?.status === 'CLOSED';
 
@@ -96,8 +106,16 @@ export function RecruitDetailPage() {
 
     dissolveHandledRef.current = true;
     toast.warning('파티가 해산되었습니다.');
+
+    // 해산은 남이 한 것이라 세션 id 를 받을 길이 없다. 대기 목록에서 찾는다.
+    const mine = pendingSessions.find((s) => s.postId === postId);
+    if (mine) {
+      setLeaveAfterRating(true);
+      setRatingSessionId(mine.id);
+      return;
+    }
     navigate(LIST_PATH);
-  }, [isClosed, postId, navigate]);
+  }, [isClosed, postId, pendingSessions, navigate]);
 
   const respondMutation = useMutation({
     mutationFn: ({ applicationId, accept }: { applicationId: string; accept: boolean }) =>
@@ -111,11 +129,21 @@ export function RecruitDetailPage() {
 
   /**
    * 탈퇴·퇴장·해산은 평가 세션 id 를 돌려준다.
-   * TODO 평가 팝업(RatingFlowModal)은 다음 이식분. 지금은 세션이 생겼다는 것만 알린다.
+   * 세션이 생겼으면 팝업을 먼저 띄우고, 없으면(혼자였으면) 바로 나간다.
    */
   const afterDissolve = (sessionId: string | null, shouldLeave: boolean) => {
-    if (sessionId) toast.info('함께한 파티원 평가가 대기 중입니다. (평가 화면 준비 중)');
+    if (sessionId) {
+      setLeaveAfterRating(shouldLeave);
+      setRatingSessionId(sessionId);
+      return;
+    }
     if (shouldLeave) navigate(LIST_PATH);
+  };
+
+  /** 평가를 끝냈거나 "나중에" 를 눌렀을 때 — 남은 평가는 /ratings 에 계속 남는다 */
+  const handleRatingDone = () => {
+    setRatingSessionId(null);
+    if (leaveAfterRating) navigate(LIST_PATH);
   };
 
   const handleClose = async () => {
@@ -291,6 +319,8 @@ export function RecruitDetailPage() {
           </Card>
         )}
       </div>
+
+      {ratingSession && <RatingFlowModal onDone={handleRatingDone} session={ratingSession} />}
     </div>
   );
 }
