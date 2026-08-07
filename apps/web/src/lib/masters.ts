@@ -11,23 +11,47 @@ import { supabase, throwIfError } from '@/lib/supabase';
 export const DEFAULT_COOLDOWN_HOURS = 24;
 
 // ─── 보스 마스터 ────────────────────────────────────────────
+/** 0012 이후 컬럼 전체. 정산은 name·cooldownHours 만 쓰지만 helper 보스추적이 나머지를 쓴다 */
 export interface Boss {
   id: string;
   name: string;
+  cycle: 'DAILY' | 'WEEKLY';
   cooldownHours: number;
+  /** KST 기준 초기화 시각 (0 = 자정) */
+  resetHourKst: number;
+  difficulty: string;
+  sortOrder: number;
+  /** 쿨타임 안에 몇 번까지 들어갈 수 있는가 */
+  maxEntries: number;
 }
 
+function toBoss(r: {
+  id: string;
+  name: string;
+  cycle: string;
+  cooldown_hours: number;
+  reset_hour_kst: number;
+  difficulty: string;
+  sort_order: number;
+  max_entries: number;
+}): Boss {
+  return {
+    id: r.id,
+    name: r.name,
+    cycle: r.cycle as Boss['cycle'],
+    cooldownHours: r.cooldown_hours,
+    resetHourKst: r.reset_hour_kst,
+    difficulty: r.difficulty,
+    sortOrder: r.sort_order,
+    maxEntries: r.max_entries,
+  };
+}
+
+/** 정렬은 이름이 아니라 마스터가 정한 sort_order 다 (0012 가 1~8 로 매겼다) */
 export async function getBosses(): Promise<Boss[]> {
-  const { data, error } = await supabase
-    .from('bosses')
-    .select('id, name, cooldown_hours')
-    .order('name');
+  const { data, error } = await supabase.from('bosses').select('*').order('sort_order');
   throwIfError(error);
-  return (data ?? []).map((b) => ({
-    id: b.id,
-    name: b.name,
-    cooldownHours: b.cooldown_hours,
-  }));
+  return (data ?? []).map(toBoss);
 }
 
 export const MAX_COOLDOWN_HOURS = 720;
@@ -63,10 +87,10 @@ export async function addBoss(name: string, cooldownHours = DEFAULT_COOLDOWN_HOU
   const { data, error } = await supabase
     .from('bosses')
     .insert({ id: makeMasterId('boss'), name: trimmed, cooldown_hours: cooldownHours })
-    .select('id, name, cooldown_hours')
+    .select('*')
     .single();
   throwIfError(error);
-  return { id: data!.id, name: data!.name, cooldownHours: data!.cooldown_hours };
+  return toBoss(data!);
 }
 
 export async function updateBossCooldown(id: string, cooldownHours: number): Promise<Boss> {
@@ -77,10 +101,10 @@ export async function updateBossCooldown(id: string, cooldownHours: number): Pro
     .from('bosses')
     .update({ cooldown_hours: cooldownHours })
     .eq('id', id)
-    .select('id, name, cooldown_hours')
+    .select('*')
     .single();
   throwIfError(error);
-  return { id: data!.id, name: data!.name, cooldownHours: data!.cooldown_hours };
+  return toBoss(data!);
 }
 
 /**

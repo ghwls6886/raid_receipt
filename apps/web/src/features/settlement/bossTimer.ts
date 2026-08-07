@@ -7,18 +7,11 @@
  */
 import type { Boss } from '@/lib/masters';
 import type { BossEntry } from '@/features/settlement/api';
+import { nextAvailableAt } from '@/lib/cooldown';
 
-const HOUR_MS = 60 * 60 * 1000;
-
-/** 입장 시각 + 쿨타임 → 다음 입장 가능 시각 (epoch ms) */
-export function nextAvailableAt(enteredAt: string, cooldownHours: number): number {
-  return new Date(enteredAt).getTime() + cooldownHours * HOUR_MS;
-}
-
-/** 다음 입장 가능 시각까지 남은 ms. 0 이면 지금 입장 가능 */
-export function remainingMs(nextAt: number, now: number): number {
-  return Math.max(0, nextAt - now);
-}
+// 쿨타임 공식은 helper 도 쓰므로 @/lib/cooldown 으로 올렸다 (MERGE_PLAN §4.1 원칙 3).
+// 기존 소비자가 경로를 바꾸지 않아도 되게 여기서 다시 내보낸다.
+export { nextAvailableAt, remainingMs } from '@/lib/cooldown';
 
 /** 보스 한 종류의 타이머 상태 — 화면이 그대로 그릴 수 있는 형태 */
 export interface BossTimer {

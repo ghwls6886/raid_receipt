@@ -148,6 +148,167 @@ export async function reactivateCharacter(id: string): Promise<void> {
   throwIfError(error);
 }
 
+// ─── 개인 보스 입장 기록 ────────────────────────────────────
+// 테이블은 char_boss_entries — 정산의 boss_entries 와 이름이 겹쳐 개명한 것이다.
+// 정산은 공대 단위(guild_id, party_id), 여기는 캐릭터 단위(user_id, character_id)+note.
+// 축이 달라 합칠 수 없다 (MERGE_PLAN 함정 2).
+
+export interface CharBossEntry {
+  id: string;
+  userId: string;
+  characterId: string;
+  bossId: string;
+  /** 마스터에서 보스가 사라져도 화면이 이름을 잃지 않도록 남기는 스냅샷 */
+  bossName: string;
+  enteredAt: string;
+  note: string;
+}
+
+export interface UserBossTracking {
+  userId: string;
+  bossId: string;
+  characterId: string;
+  notifyEnabled: boolean;
+}
+
+function toCharBossEntry(r: {
+  id: string;
+  user_id: string;
+  character_id: string;
+  boss_id: string;
+  boss_name: string;
+  entered_at: string;
+  note: string;
+}): CharBossEntry {
+  return {
+    id: r.id,
+    userId: r.user_id,
+    characterId: r.character_id,
+    bossId: r.boss_id,
+    bossName: r.boss_name,
+    enteredAt: r.entered_at,
+    note: r.note,
+  };
+}
+
+function toTracking(r: {
+  user_id: string;
+  boss_id: string;
+  character_id: string;
+  notify_enabled: boolean;
+}): UserBossTracking {
+  return {
+    userId: r.user_id,
+    bossId: r.boss_id,
+    characterId: r.character_id,
+    notifyEnabled: r.notify_enabled,
+  };
+}
+
+/** characterId 를 주면 그 캐릭터만, 없으면 내 전체 기록 (최신순) */
+export async function getCharBossEntries(characterId?: string): Promise<CharBossEntry[]> {
+  let query = supabase
+    .from('char_boss_entries')
+    .select('*')
+    .order('entered_at', { ascending: false });
+  if (characterId) query = query.eq('character_id', characterId);
+
+  const { data, error } = await query;
+  throwIfError(error);
+  return (data ?? []).map(toCharBossEntry);
+}
+
+export async function addCharBossEntry(input: {
+  characterId: string;
+  bossId: string;
+  bossName: string;
+  note?: string;
+  /** 생략하면 지금. "입장하고 늦게 눌렀을 때" 사용자가 보정할 수 있다 */
+  enteredAt?: string;
+}): Promise<CharBossEntry> {
+  const { data, error } = await supabase
+    .from('char_boss_entries')
+    .insert({
+      user_id: await getUserId(),
+      character_id: input.characterId,
+      boss_id: input.bossId,
+      boss_name: input.bossName,
+      note: input.note ?? '',
+      entered_at: input.enteredAt ?? new Date().toISOString(),
+    })
+    .select()
+    .single();
+  throwIfError(error);
+  return toCharBossEntry(data!);
+}
+
+export async function deleteCharBossEntry(id: string): Promise<void> {
+  const { error } = await supabase.from('char_boss_entries').delete().eq('id', id);
+  throwIfError(error);
+}
+
+export async function updateCharBossEntryTime(
+  id: string,
+  enteredAt: string,
+): Promise<CharBossEntry> {
+  const { data, error } = await supabase
+    .from('char_boss_entries')
+    .update({ entered_at: enteredAt })
+    .eq('id', id)
+    .select()
+    .single();
+  throwIfError(error);
+  return toCharBossEntry(data!);
+}
+
+// ─── 보스 추적 등록 ─────────────────────────────────────────
+export async function getBossTrackings(characterId: string): Promise<UserBossTracking[]> {
+  const { data, error } = await supabase
+    .from('user_boss_tracking')
+    .select('*')
+    .eq('character_id', characterId);
+  throwIfError(error);
+  return (data ?? []).map(toTracking);
+}
+
+/** 등록 토글 — 없으면 켜서 만들고, 있으면 notify_enabled 를 뒤집는다 */
+export async function toggleBossTracking(
+  characterId: string,
+  bossId: string,
+): Promise<UserBossTracking> {
+  const userId = await getUserId();
+
+  // 미등록이 정상 경로다. single 이면 그때마다 에러가 나므로 maybeSingle 을 쓴다.
+  const { data: existing, error: findError } = await supabase
+    .from('user_boss_tracking')
+    .select('*')
+    .eq('character_id', characterId)
+    .eq('boss_id', bossId)
+    .maybeSingle();
+  throwIfError(findError);
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from('user_boss_tracking')
+      .update({ notify_enabled: !existing.notify_enabled })
+      .eq('user_id', userId)
+      .eq('boss_id', bossId)
+      .eq('character_id', characterId)
+      .select()
+      .single();
+    throwIfError(error);
+    return toTracking(data!);
+  }
+
+  const { data, error } = await supabase
+    .from('user_boss_tracking')
+    .insert({ user_id: userId, boss_id: bossId, character_id: characterId, notify_enabled: true })
+    .select()
+    .single();
+  throwIfError(error);
+  return toTracking(data!);
+}
+
 // ─── 숙제 체크리스트 ────────────────────────────────────────
 // 항목 정의(템플릿)는 **계정 단위**, 완료 기록은 **캐릭터 × 기간** 단위다.
 // 그래서 캐릭터를 여럿 키우면 같은 "자쿰" 항목이 캐릭터마다 따로 체크된다.

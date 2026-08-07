@@ -323,7 +323,16 @@ apps/web/src/
         "첫 항목 추가"와 "미완료 항목 체크"가 **정상 경로인데 에러가 나던** 자리다
       ↳ 항목 삭제 버튼 추가 — `removeChecklistTemplate` 이 MH 에선 정의만 되고
         화면에 연결돼 있지 않았다
-- [ ] 개인 보스 추적 (`boss-tracker` 6 컴포넌트, `useBosses`, `useNow`)
+- [x] 개인 보스 추적 (`boss-tracker`) (2026-08-07)
+      ↳ **월별 이력 화면(`BossCalendarView` + `BossHistoryPage`, 219줄)은 아직 안 옮겼다.**
+        타이머 본체와 독립적인 조회 화면이라 뒤로 미뤘다 — `getBossEntriesByMonth` 도 함께 남았다
+      ↳ `lib/cooldown.ts` 신규 — 쿨타임 공식을 정산·helper 가 공유한다.
+        `features/settlement/bossTimer.ts` 는 재수출만 남겨 기존 import 경로를 유지
+      ↳ `lib/masters.ts` 의 `Boss` 를 마스터 전 컬럼으로 확장(`cycle`·`maxEntries` 등).
+        정렬도 이름 → `sort_order` 로. 0012 가 매긴 순서가 화면 순서가 된다
+      ↳ `useBosses` 의 하드코딩 폴백은 **가져오지 않았다**. 마스터의 진실은 `bosses` 하나여야 한다
+      ↳ `.single()` 오류 삼킴 1곳(`toggleBossTracking`)을 `.maybeSingle()` 로 교체
+      ↳ `components/ui/Toggle` 신규(공용), `lib/date.ts` 에 `toDatetimeLocal` 추가
 - [ ] **버프콜** — `buff-call` 8 컴포넌트, `useAudioAlert` · `useWakeLock`,
       `lib/audio.ts` · `buffTimer.ts` · `buffTimerRunner.ts`,
       **`workers/buff-timer.worker.ts` + `workers/types.ts`**, `stores/useBuffCallStore.ts`

@@ -6,6 +6,7 @@ import {
   Swords,
   Sword,
   ListChecks,
+  Timer,
   Users,
   Settings,
   Moon,
@@ -47,6 +48,7 @@ const SETTLEMENT_NAV: readonly NavItem[] = [
 const HELPER_NAV: readonly NavItem[] = [
   { to: '/characters', label: '캐릭터', Icon: Sword, end: false },
   { to: '/checklist', label: '숙제', Icon: ListChecks, end: false },
+  { to: '/boss-tracker', label: '보스 타이머', Icon: Timer, end: false },
 ];
 
 /**

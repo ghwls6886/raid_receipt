@@ -11,6 +11,18 @@
  * lib/format.ts 와 역할이 다르다 — 저쪽은 화면 표시용 포맷터고, 여기는 저장 키다.
  */
 
+/**
+ * `<input type="datetime-local">` 이 요구하는 "YYYY-MM-DDTHH:mm".
+ *
+ * toISOString() 을 쓰면 안 된다 — UTC 로 바뀌어서 사용자가 보는 시각이 밀린다.
+ * 여기는 기간 키와 달리 **로컬 타임존**이 맞다. 사용자가 자기 시계를 보고
+ * 입장 시각을 보정하는 입력이기 때문이다.
+ */
+export function toDatetimeLocal(date: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}`;
+}
+
 /** KST 기준 오늘 "YYYY-MM-DD" — 일간 숙제의 기간 키 */
 export function getTodayKST(): string {
   // sv-SE 로케일이 ISO 형태(YYYY-MM-DD)를 그대로 준다

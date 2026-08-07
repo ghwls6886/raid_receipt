@@ -13,6 +13,7 @@ import { OnboardingPage } from '@/pages/auth/OnboardingPage';
 // 개인 도구 — 길드 없이 쓴다 (MERGE_PLAN §7 2단계)
 import { CharactersPage } from '@/features/helper/pages/CharactersPage';
 import { ChecklistPage } from '@/features/helper/pages/ChecklistPage';
+import { BossTrackerPage } from '@/features/helper/pages/BossTrackerPage';
 // 메인 기능 — 로그인 + 길드 선택 완료 후
 import { DashboardPage } from '@/features/settlement/pages/DashboardPage';
 import { RaidsPage } from '@/features/settlement/pages/RaidsPage';
@@ -63,6 +64,7 @@ function App() {
           >
             <Route element={<CharactersPage />} path="characters" />
             <Route element={<ChecklistPage />} path="checklist" />
+            <Route element={<BossTrackerPage />} path="boss-tracker" />
             <Route element={<NotFoundPage />} path="*" />
           </Route>
 
