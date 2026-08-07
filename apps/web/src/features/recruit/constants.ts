@@ -13,7 +13,9 @@ export interface RecruitCategory {
 /** 필터 전용 값. 구인 글에는 저장되지 않는다 */
 export const CATEGORY_ALL = 'all';
 
+/** 사이드바가 그대로 순회한다 — 'all' 이 목록의 일부다 */
 export const RECRUIT_CATEGORIES: RecruitCategory[] = [
+  { id: CATEGORY_ALL, label: '전체' },
   { id: 'hunt_10_30', label: '사냥 10~30' },
   { id: 'hunt_31_60', label: '사냥 31~60' },
   { id: 'hunt_61_100', label: '사냥 61~100' },
@@ -23,6 +25,9 @@ export const RECRUIT_CATEGORIES: RecruitCategory[] = [
   { id: 'party_quest', label: '파티퀘스트' },
   { id: 'boss_expedition', label: '보스 원정대' },
 ];
+
+/** 작성 폼용 — 'all' 은 필터 값이라 글에 저장될 수 없다 */
+export const CREATABLE_CATEGORIES = RECRUIT_CATEGORIES.filter((c) => c.id !== CATEGORY_ALL);
 
 /** 목록에 없는 값이면 id 를 그대로 보여준다 — 빈칸보다는 낫다 */
 export function categoryLabel(id: string): string {

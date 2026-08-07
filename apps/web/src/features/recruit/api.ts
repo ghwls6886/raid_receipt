@@ -128,17 +128,21 @@ function toPost(r: PostRow): RecruitPost {
 /**
  * 구인 글 목록. CLOSED 는 빼고 최신순.
  *
- * category 를 주면 그것만, 없으면 전체. 필터를 DB 로 내리는 이유는 목록이 커졌을 때
- * 전부 받아 와서 클라이언트가 거르면 egress 가 그대로 나가기 때문이다 (§8).
+ * **서버로만 거른다.** 카테고리는 화면이 클라이언트에서 거른다 — 사이드바의
+ * 카테고리별 카운트 배지를 그리려면 어차피 카테고리 필터가 걸리지 않은
+ * 전체 목록이 필요하기 때문이다.
+ *
+ * 서버는 반대로 DB 에서 거른다. 다른 서버 글은 애초에 볼 이유가 없어서
+ * 받아오면 egress 만 나간다 (§8).
  */
-export async function getRecruitPosts(category?: string): Promise<RecruitPost[]> {
+export async function getRecruitPosts(opts?: { serverName?: string }): Promise<RecruitPost[]> {
   let query = supabase
     .from('recruit_posts')
     .select(SELECT_WITH_JOINS)
     .in('status', ACTIVE_STATUSES)
     .order('created_at', { ascending: false });
 
-  if (category) query = query.eq('category', category);
+  if (opts?.serverName) query = query.eq('server_name', opts.serverName);
 
   const { data, error } = await query;
   throwIfError(error);

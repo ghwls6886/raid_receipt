@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createRecruitPost, getMyRecruitCharacters } from '@/features/recruit/api';
-import { RECRUIT_CATEGORIES } from '@/features/recruit/constants';
+import { CREATABLE_CATEGORIES } from '@/features/recruit/constants';
 import { toast } from '@/stores/useToastStore';
 import { Modal } from '@/components/popup/Modal';
 import { Button } from '@/components/ui/Button';
@@ -11,6 +11,8 @@ import { Select } from '@/components/ui/Select';
 interface RecruitCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** 목록에서 고른 캐릭터 — 여기서 다시 고르지 않아도 되게 기본값으로 받는다 */
+  defaultCharacterId?: string;
 }
 
 const MIN_MEMBERS = 2;
@@ -22,7 +24,11 @@ const MAX_MEMBERS = 6;
  * 캐릭터를 고르면 서버·스공이 그 캐릭터 값으로 채워진다 — 구인 글의 서버는 파티장
  * 캐릭터의 서버여야 하고, 매번 손으로 적게 하면 오타로 다른 서버 글이 섞인다.
  */
-export function RecruitCreateModal({ isOpen, onClose }: RecruitCreateModalProps) {
+export function RecruitCreateModal({
+  isOpen,
+  onClose,
+  defaultCharacterId,
+}: RecruitCreateModalProps) {
   const queryClient = useQueryClient();
 
   const { data: characters = [] } = useQuery({
@@ -31,9 +37,9 @@ export function RecruitCreateModal({ isOpen, onClose }: RecruitCreateModalProps)
     enabled: isOpen,
   });
 
-  const [characterId, setCharacterId] = useState('');
+  const [characterId, setCharacterId] = useState(defaultCharacterId ?? '');
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState(RECRUIT_CATEGORIES[0]!.id);
+  const [category, setCategory] = useState(CREATABLE_CATEGORIES[0]!.id);
   const [maxMembers, setMaxMembers] = useState(4);
   const [requiredStat, setRequiredStat] = useState('');
   const [specDescription, setSpecDescription] = useState('');
@@ -128,7 +134,7 @@ export function RecruitCreateModal({ isOpen, onClose }: RecruitCreateModalProps)
           <label className="flex flex-col gap-1">
             <span className="text-text-primary text-sm font-medium">카테고리</span>
             <Select onChange={(e) => setCategory(e.target.value)} value={category}>
-              {RECRUIT_CATEGORIES.map((c) => (
+              {CREATABLE_CATEGORIES.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.label}
                 </option>
