@@ -5,10 +5,8 @@
  * 쿨타임을 코드에 박지 않고 보스 마스터 값으로 두었기 때문에, 게임 규칙이 바뀌거나
  * 보스마다 주기가 달라도(주 1회 = 168) 관리자 화면에서 숫자만 고치면 된다.
  */
-import type { Boss, BossEntry } from '@/lib/api';
-
-/** 보스 마스터에 쿨타임이 없을 때 쓰는 기본값 (시간) */
-export const DEFAULT_COOLDOWN_HOURS = 24;
+import type { Boss } from '@/lib/masters';
+import type { BossEntry } from '@/features/settlement/api';
 
 const HOUR_MS = 60 * 60 * 1000;
 

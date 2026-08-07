@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { useCurrentGuild } from '@/stores/useGuildStore';
-import { deleteRaid, getRaids, resendReceipt, type RaidRow } from '@/lib/api';
+import { deleteRaid, getRaids, resendReceipt, type RaidRow } from '@/features/settlement/api';
 import { confirm } from '@/stores/useConfirmStore';
 import { toast } from '@/stores/useToastStore';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { RaidTable } from '@/components/raids/RaidTable';
+import { RaidTable } from '@/features/settlement/components/raids/RaidTable';
 import { LineChart, type LineChartSeries } from '@/components/charts/LineChart';
 import { LoadingState } from '@/components/feedback/LoadingState';
 

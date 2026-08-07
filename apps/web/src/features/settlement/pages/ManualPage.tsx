@@ -24,7 +24,7 @@ import {
   type QuickStartStep,
   type RuleSection,
   type ManualSection,
-} from '@/lib/manual';
+} from '@/features/settlement/manual';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';

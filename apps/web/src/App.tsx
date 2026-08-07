@@ -11,14 +11,14 @@ import { NotFoundPage } from '@/pages/public/NotFoundPage';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { OnboardingPage } from '@/pages/auth/OnboardingPage';
 // 메인 기능 — 로그인 + 길드 선택 완료 후
-import { DashboardPage } from '@/pages/app/DashboardPage';
-import { RaidsPage } from '@/pages/app/RaidsPage';
-import { RaidNewPage } from '@/pages/app/RaidNewPage';
-import { PartiesPage } from '@/pages/app/PartiesPage';
-import { MembersPage } from '@/pages/app/MembersPage';
-import { GuildSettingsPage } from '@/pages/app/GuildSettingsPage';
-import { AdminPage } from '@/pages/app/AdminPage';
-import { ManualPage } from '@/pages/app/ManualPage';
+import { DashboardPage } from '@/features/settlement/pages/DashboardPage';
+import { RaidsPage } from '@/features/settlement/pages/RaidsPage';
+import { RaidNewPage } from '@/features/settlement/pages/RaidNewPage';
+import { PartiesPage } from '@/features/settlement/pages/PartiesPage';
+import { MembersPage } from '@/features/settlement/pages/MembersPage';
+import { GuildSettingsPage } from '@/features/settlement/pages/GuildSettingsPage';
+import { AdminPage } from '@/features/settlement/pages/AdminPage';
+import { ManualPage } from '@/features/settlement/pages/ManualPage';
 import { initTheme } from '@/stores/useThemeStore';
 import { useAuthStore } from '@/stores/useAuthStore';
 

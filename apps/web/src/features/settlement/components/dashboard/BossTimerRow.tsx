@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { CheckCircle2, Hourglass, Pencil, X } from 'lucide-react';
 import { useNow } from '@/hooks/useNow';
-import { remainingMs, type BossTimer } from '@/lib/bossTimer';
+import { remainingMs, type BossTimer } from '@/features/settlement/bossTimer';
 import { formatDuration, formatRelativeDateTime } from '@/lib/format';
 import { toast } from '@/stores/useToastStore';
 import { Button } from '@/components/ui/Button';
