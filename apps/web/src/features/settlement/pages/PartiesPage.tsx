@@ -14,7 +14,7 @@ import {
   type Member,
   type Party,
   type RemainderPolicy,
-} from '@/lib/api';
+} from '@/features/settlement/api';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';

@@ -15,7 +15,6 @@ import {
 import { useCurrentGuild } from '@/stores/useGuildStore';
 import { useAuthStore } from '@/stores/useAuthStore';
 import {
-  getBosses,
   getMembers,
   getGuildSettings,
   getRaids,
@@ -35,8 +34,9 @@ import {
   type RaidStatus,
   type RaidInput,
   type RemainderPolicy,
-} from '@/lib/api';
-import { calcSettlement } from '@/lib/settlement';
+} from '@/features/settlement/api';
+import { getBosses } from '@/lib/masters';
+import { calcSettlement } from '@/features/settlement/settlement';
 import { formatMeso, formatMesoCompact } from '@/lib/format';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -46,9 +46,9 @@ import { LoadingState } from '@/components/feedback/LoadingState';
 import {
   PenaltyQuickAddDialog,
   SubsidyQuickAddDialog,
-} from '@/components/raids/PolicyQuickAddDialog';
-import { SettlementRulesDialog } from '@/components/raids/SettlementRulesDialog';
-import { ChipScroller } from '@/components/raids/ChipScroller';
+} from '@/features/settlement/components/raids/PolicyQuickAddDialog';
+import { SettlementRulesDialog } from '@/features/settlement/components/raids/SettlementRulesDialog';
+import { ChipScroller } from '@/features/settlement/components/raids/ChipScroller';
 import { toast } from '@/stores/useToastStore';
 import { confirm } from '@/stores/useConfirmStore';
 import { cn } from '@/lib/cn';

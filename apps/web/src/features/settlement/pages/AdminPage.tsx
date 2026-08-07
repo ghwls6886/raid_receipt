@@ -3,20 +3,20 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, Swords, Server, AlertTriangle, type LucideIcon } from 'lucide-react';
 import { toast } from '@/stores/useToastStore';
 import { confirm } from '@/stores/useConfirmStore';
+import { getErrorLogs } from '@/features/settlement/api';
 import {
   getBosses,
   addBoss,
   deleteBoss,
   updateBossCooldown,
+  DEFAULT_COOLDOWN_HOURS,
   MAX_COOLDOWN_HOURS,
   getServers,
   addServer,
   deleteServer,
-  getErrorLogs,
   type Boss,
   type GameServer,
-} from '@/lib/api';
-import { DEFAULT_COOLDOWN_HOURS } from '@/lib/bossTimer';
+} from '@/lib/masters';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';

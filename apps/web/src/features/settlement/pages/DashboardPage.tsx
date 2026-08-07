@@ -3,16 +3,16 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Plus, TrendingUp, Wallet, CalendarDays, Crown, ArrowRight } from 'lucide-react';
 import { useCurrentGuild } from '@/stores/useGuildStore';
-import { getDashboardStats, getRaids, getBossAverages, getMemberStats } from '@/lib/api';
+import { getDashboardStats, getRaids, getBossAverages, getMemberStats } from '@/features/settlement/api';
 import { formatMesoCompact } from '@/lib/format';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { StatTile } from '@/components/ui/StatTile';
-import { RaidTable } from '@/components/raids/RaidTable';
+import { RaidTable } from '@/features/settlement/components/raids/RaidTable';
 import { LineChart } from '@/components/charts/LineChart';
 import { LoadingState } from '@/components/feedback/LoadingState';
-import { BossTimerCard } from '@/components/dashboard/BossTimerCard';
+import { BossTimerCard } from '@/features/settlement/components/dashboard/BossTimerCard';
 import { cn } from '@/lib/cn';
 
 const RANK_TONE = [

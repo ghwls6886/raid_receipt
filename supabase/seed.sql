@@ -1,9 +1,8 @@
--- seed.sql — SYS 마스터 초기값. 적용: supabase db reset (seed 자동 실행) 또는 psql 로 실행.
-
-insert into bosses (name) values
-  ('자쿰'), ('혼테일'), ('핑크빈'), ('카오스 자쿰'), ('카오스 혼테일'), ('카오스 핑크빈')
-on conflict (name) do nothing;
-
-insert into game_servers (name) values
-  ('메이플랜드'), ('메이플플래닛')
-on conflict (name) do nothing;
+-- seed.sql — 로컬 개발용 초기 데이터. 적용: supabase db reset (seed 자동 실행) 또는 psql 로 실행.
+--
+-- 보스·서버 마스터는 여기 없다. 0012_helper_masters.sql 로 옮겼다.
+-- helper 코드가 'zakum' 같은 슬러그 id 를 전제하므로 로컬뿐 아니라 **운영 DB 에도**
+-- 반드시 있어야 하는 참조 데이터인데, seed 는 운영에서 실행되지 않기 때문이다.
+-- 마스터 값을 고칠 때는 새 마이그레이션에서 upsert 한다.
+--
+-- 지금은 비어 있다. 로컬 전용 더미 데이터가 생기면 여기 둔다.

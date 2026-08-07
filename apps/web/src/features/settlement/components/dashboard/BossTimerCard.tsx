@@ -5,12 +5,12 @@ import { AlarmClock, Swords } from 'lucide-react';
 import {
   deleteBossEntry,
   getBossEntries,
-  getBosses,
   getParties,
   recordBossEntry,
   updateBossEntry,
-} from '@/lib/api';
-import { bossesWithoutEntry, buildBossTimers, type BossTimer } from '@/lib/bossTimer';
+} from '@/features/settlement/api';
+import { getBosses } from '@/lib/masters';
+import { bossesWithoutEntry, buildBossTimers, type BossTimer } from '@/features/settlement/bossTimer';
 import { useCurrentGuild } from '@/stores/useGuildStore';
 import { confirm } from '@/stores/useConfirmStore';
 import { toast } from '@/stores/useToastStore';
@@ -19,8 +19,8 @@ import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingState } from '@/components/feedback/LoadingState';
-import { BossTimerRow } from '@/components/dashboard/BossTimerRow';
-import { EntryTimeModal } from '@/components/dashboard/EntryTimeModal';
+import { BossTimerRow } from '@/features/settlement/components/dashboard/BossTimerRow';
+import { EntryTimeModal } from '@/features/settlement/components/dashboard/EntryTimeModal';
 
 /** 편집 모달 대상 — 열려 있으면 이 값이 채워져 있다 */
 interface EditTarget {

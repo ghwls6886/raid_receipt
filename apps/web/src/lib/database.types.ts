@@ -7,6 +7,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.15"
+  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -139,18 +144,33 @@ export type Database = {
       bosses: {
         Row: {
           cooldown_hours: number
+          cycle: Database["public"]["Enums"]["boss_cycle"]
+          difficulty: string
           id: string
+          max_entries: number
           name: string
+          reset_hour_kst: number
+          sort_order: number
         }
         Insert: {
           cooldown_hours?: number
-          id?: string
+          cycle?: Database["public"]["Enums"]["boss_cycle"]
+          difficulty?: string
+          id: string
+          max_entries?: number
           name: string
+          reset_hour_kst?: number
+          sort_order?: number
         }
         Update: {
           cooldown_hours?: number
+          cycle?: Database["public"]["Enums"]["boss_cycle"]
+          difficulty?: string
           id?: string
+          max_entries?: number
           name?: string
+          reset_hour_kst?: number
+          sort_order?: number
         }
         Relationships: []
       }
@@ -239,16 +259,25 @@ export type Database = {
       }
       game_servers: {
         Row: {
+          created_at: string
           id: string
+          is_active: boolean
           name: string
+          sort_order: number
         }
         Insert: {
-          id?: string
+          created_at?: string
+          id: string
+          is_active?: boolean
           name: string
+          sort_order?: number
         }
         Update: {
+          created_at?: string
           id?: string
+          is_active?: boolean
           name?: string
+          sort_order?: number
         }
         Relationships: []
       }
@@ -1082,6 +1111,7 @@ export type Database = {
     }
     Enums: {
       account_role: "OWNER" | "ADMIN" | "MEMBER"
+      boss_cycle: "DAILY" | "WEEKLY"
       expense_category: "CONSUMABLE" | "ENTRY" | "ETC"
       member_role: "MASTER" | "MANAGER" | "MEMBER"
       penalty_calc_type: "PERCENT" | "FIXED"
@@ -1218,6 +1248,7 @@ export const Constants = {
   public: {
     Enums: {
       account_role: ["OWNER", "ADMIN", "MEMBER"],
+      boss_cycle: ["DAILY", "WEEKLY"],
       expense_category: ["CONSUMABLE", "ENTRY", "ETC"],
       member_role: ["MASTER", "MANAGER", "MEMBER"],
       penalty_calc_type: ["PERCENT", "FIXED"],
@@ -1226,4 +1257,3 @@ export const Constants = {
     },
   },
 } as const
-

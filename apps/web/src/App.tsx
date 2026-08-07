@@ -11,14 +11,14 @@ import { NotFoundPage } from '@/pages/public/NotFoundPage';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { OnboardingPage } from '@/pages/auth/OnboardingPage';
 // 메인 기능 — 로그인 + 길드 선택 완료 후
-import { DashboardPage } from '@/pages/app/DashboardPage';
-import { RaidsPage } from '@/pages/app/RaidsPage';
-import { RaidNewPage } from '@/pages/app/RaidNewPage';
-import { PartiesPage } from '@/pages/app/PartiesPage';
-import { MembersPage } from '@/pages/app/MembersPage';
-import { GuildSettingsPage } from '@/pages/app/GuildSettingsPage';
-import { AdminPage } from '@/pages/app/AdminPage';
-import { ManualPage } from '@/pages/app/ManualPage';
+import { DashboardPage } from '@/features/settlement/pages/DashboardPage';
+import { RaidsPage } from '@/features/settlement/pages/RaidsPage';
+import { RaidNewPage } from '@/features/settlement/pages/RaidNewPage';
+import { PartiesPage } from '@/features/settlement/pages/PartiesPage';
+import { MembersPage } from '@/features/settlement/pages/MembersPage';
+import { GuildSettingsPage } from '@/features/settlement/pages/GuildSettingsPage';
+import { AdminPage } from '@/features/settlement/pages/AdminPage';
+import { ManualPage } from '@/features/settlement/pages/ManualPage';
 import { initTheme } from '@/stores/useThemeStore';
 import { useAuthStore } from '@/stores/useAuthStore';
 
@@ -46,6 +46,22 @@ function App() {
             }
             path="/onboarding"
           />
+          {/*
+            길드 불필요 — 로그인만 하면 되는 화면 (MERGE_PLAN §4).
+            2단계에서 개인 도구(캐릭터·숙제·보스추적·버프콜)가 이 그룹에 붙는다.
+            404 를 여기 둔 이유: 오타 URL 하나 때문에 길드 생성을 요구할 이유가 없다.
+          */}
+          <Route
+            element={
+              <RequireAuth>
+                <Layout />
+              </RequireAuth>
+            }
+          >
+            <Route element={<NotFoundPage />} path="*" />
+          </Route>
+
+          {/* 길드 필수 — 정산·공대·멤버 */}
           <Route
             element={
               <RequireAuth requireOnboarded>
@@ -62,7 +78,6 @@ function App() {
             <Route element={<GuildSettingsPage />} path="settings" />
             <Route element={<AdminPage />} path="admin" />
             <Route element={<ManualPage />} path="manual" />
-            <Route element={<NotFoundPage />} path="*" />
           </Route>
         </Routes>
       </BrowserRouter>

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
-import { addPenaltyType, addSubsidyType, JOB_GROUPS, type PenaltyCalcType } from '@/lib/api';
+import { addPenaltyType, addSubsidyType, JOB_GROUPS, type PenaltyCalcType } from '@/features/settlement/api';
 import { Modal } from '@/components/popup/Modal';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';

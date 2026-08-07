@@ -7,7 +7,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { supabase } from '@/lib/supabase';
-import type { AccountRole } from '@/lib/api';
+import type { AccountRole } from '@/lib/account';
 
 export interface Guild {
   id: string;
