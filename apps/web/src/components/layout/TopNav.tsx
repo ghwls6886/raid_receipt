@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   ScrollText,
   Swords,
+  Sword,
   Users,
   Settings,
   Moon,
@@ -39,11 +40,12 @@ const SETTLEMENT_NAV: readonly NavItem[] = [
 ];
 
 /**
- * 길드 없이 쓰는 화면들 — 개인 도구.
- * 2단계에서 캐릭터·숙제·보스추적·버프콜이 여기 붙는다 (MERGE_PLAN §7 2단계).
- * 그때까지는 비어 있고, 비면 내비 행 자체를 그리지 않는다.
+ * 길드 없이 쓰는 화면들 — 개인 도구 (MERGE_PLAN §7 2단계).
+ * 숙제·보스추적·버프콜이 순서대로 여기 붙는다. 비면 내비 행 자체를 그리지 않는다.
  */
-const HELPER_NAV: readonly NavItem[] = [];
+const HELPER_NAV: readonly NavItem[] = [
+  { to: '/characters', label: '캐릭터', Icon: Sword, end: false },
+];
 
 /**
  * 상단 탑바 — 사이드바 없는 SaaS 셸.

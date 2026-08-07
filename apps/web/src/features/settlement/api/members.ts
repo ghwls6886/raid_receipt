@@ -2,6 +2,7 @@
  * 공대원 — 명단 · 직업 그룹 · 권한 · 활성/비활성
  */
 import { supabase, throwIfError } from '@/lib/supabase';
+import { JOB_GROUPS, jobCategoryOf } from '@/lib/jobs';
 import { getParties } from './parties';
 
 // ─── 공대원 ─────────────────────────────────────────────────
@@ -24,24 +25,9 @@ export interface Member {
   isActive: boolean;
 }
 
-export interface JobGroup {
-  category: string;
-  jobs: string[];
-}
-
-export const JOB_GROUPS: JobGroup[] = [
-  { category: '전사', jobs: ['히어로', '팔라딘', '다크나이트'] },
-  { category: '마법사', jobs: ['아크메이지(불,독)', '아크메이지(썬,콜)', '비숍'] },
-  { category: '궁수', jobs: ['보우마스터', '신궁'] },
-  { category: '도적', jobs: ['나이트로드', '섀도어'] },
-  { category: '해적', jobs: ['바이퍼', '캡틴'] },
-];
-
-export const JOB_CATEGORIES: string[] = JOB_GROUPS.map((g) => g.category);
-
-export function jobCategoryOf(job: string): string {
-  return JOB_GROUPS.find((g) => g.jobs.includes(job))?.category ?? '기타';
-}
+// 직업 분류(JOB_GROUPS · JOB_CATEGORIES · jobCategoryOf)는 @/lib/jobs 로 옮겼다.
+// helper 캐릭터 등록 폼이 같은 목록을 쓰는데, helper 가 settlement 을 import 하면
+// 안 되기 때문이다 (MERGE_PLAN §4.1 원칙 3).
 
 export interface JobSection {
   category: string;

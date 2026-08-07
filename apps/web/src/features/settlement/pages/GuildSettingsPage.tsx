@@ -11,7 +11,6 @@ import {
   getSubsidyTypes,
   addSubsidyType,
   deleteSubsidyType,
-  JOB_GROUPS,
   createInvite,
   getAccounts,
   updateAccountRole,
@@ -22,6 +21,7 @@ import {
   type PenaltyType,
   type SubsidyType,
 } from '@/features/settlement/api';
+import { JOB_GROUPS } from '@/lib/jobs';
 import { getServers } from '@/lib/masters';
 import { ACCOUNT_ROLE_LABEL, type AccountRole, type GuildAccount } from '@/lib/account';
 import { formatMeso } from '@/lib/format';

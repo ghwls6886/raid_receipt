@@ -10,6 +10,8 @@ import { NotFoundPage } from '@/pages/public/NotFoundPage';
 // 인증 · 온보딩
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { OnboardingPage } from '@/pages/auth/OnboardingPage';
+// 개인 도구 — 길드 없이 쓴다 (MERGE_PLAN §7 2단계)
+import { CharactersPage } from '@/features/helper/pages/CharactersPage';
 // 메인 기능 — 로그인 + 길드 선택 완료 후
 import { DashboardPage } from '@/features/settlement/pages/DashboardPage';
 import { RaidsPage } from '@/features/settlement/pages/RaidsPage';
@@ -58,6 +60,7 @@ function App() {
               </RequireAuth>
             }
           >
+            <Route element={<CharactersPage />} path="characters" />
             <Route element={<NotFoundPage />} path="*" />
           </Route>
 

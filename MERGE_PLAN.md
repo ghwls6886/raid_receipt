@@ -304,8 +304,16 @@ apps/web/src/
 
 ### 2단계 — 개인 도구 이식
 
-- [ ] `0013_helper_personal.sql` 적용
-- [ ] 캐릭터 관리 (`characters` 4 컴포넌트 + `CharacterSelector`)
+- [x] `0013_helper_personal.sql` 적용 (2026-08-07)
+      ↳ `handle_new_user()` 를 덮어쓰지 않고 **병합**했다. 두 제품이 같은 이름의 함수를
+        같은 트리거에 걸고 있어서, 그대로 옮겼으면 정산 초대 링크가 조용히 죽었다
+      ↳ `user_profiles.is_admin` 은 제외 — RR `admins` + `is_admin()` 으로 통일 (§9 미결 해소)
+      ↳ MH `0009` 캐릭터 조회 정책은 4단계로 — `parties` 를 참조하는데 RR `parties` 는 공대다
+- [x] 캐릭터 관리 (`characters` 4 컴포넌트 + `CharacterSelector`) (2026-08-07)
+      ↳ `JOB_GROUPS`·`JOB_CATEGORIES` 를 `lib/jobs.ts` 로 공용 승격. 두 제품의 직업 계열
+        5종이 정확히 같았고, helper 가 settlement 을 import 하면 안 된다 (§4.1 원칙 3)
+      ↳ `lib/masters.ts` 에 `getActiveServers()` 추가 — 폼은 활성 서버만, 관리 화면은 전체
+      ↳ 라우트 `/characters` 를 길드 불필요 그룹에, `HELPER_NAV` 첫 항목 배선
 - [ ] 일일·주간 숙제 (`daily-checklist` 5 컴포넌트)
 - [ ] 개인 보스 추적 (`boss-tracker` 6 컴포넌트, `useBosses`, `useNow`)
 - [ ] **버프콜** — `buff-call` 8 컴포넌트, `useAudioAlert` · `useWakeLock`,

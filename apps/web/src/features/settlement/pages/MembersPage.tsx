@@ -10,12 +10,11 @@ import {
   deactivateMember,
   reactivateMember,
   groupMembersByJob,
-  JOB_GROUPS,
-  JOB_CATEGORIES,
   type JobSection,
   type Member,
   type MemberRole,
 } from '@/features/settlement/api';
+import { JOB_GROUPS, JOB_CATEGORIES } from '@/lib/jobs';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -320,7 +319,8 @@ const jobsOf = (category: string): string[] =>
 function AddMemberModal({ isOpen, guildId, onClose, onAdded }: AddMemberModalProps) {
   const firstCategory = JOB_CATEGORIES[0] ?? '전사';
   const [nickname, setNickname] = useState('');
-  const [category, setCategory] = useState(firstCategory);
+  // JOB_CATEGORIES 가 리터럴 튜플이라 추론에 맡기면 '전사' 하나로 좁혀진다 (@/lib/jobs)
+  const [category, setCategory] = useState<string>(firstCategory);
   const [job, setJob] = useState(() => jobsOf(firstCategory)[0] ?? '');
   const [level, setLevel] = useState(1);
   const [role, setRole] = useState<MemberRole>('MEMBER');

@@ -98,8 +98,23 @@ export interface GameServer {
   name: string;
 }
 
+/** 관리 화면용 — 비활성 포함 전체 */
 export async function getServers(): Promise<GameServer[]> {
   const { data, error } = await supabase.from('game_servers').select('id, name').order('name');
+  throwIfError(error);
+  return data ?? [];
+}
+
+/**
+ * 사용자 화면용 — 활성 서버만, 마스터가 정한 순서대로.
+ * 캐릭터 등록 폼(helper)이 쓴다. is_active·sort_order 는 0012 에서 들어왔다.
+ */
+export async function getActiveServers(): Promise<GameServer[]> {
+  const { data, error } = await supabase
+    .from('game_servers')
+    .select('id, name')
+    .eq('is_active', true)
+    .order('sort_order');
   throwIfError(error);
   return data ?? [];
 }
@@ -122,4 +137,3 @@ export async function deleteServer(id: string): Promise<void> {
   const { error } = await supabase.from('game_servers').delete().eq('id', id);
   throwIfError(error);
 }
-
