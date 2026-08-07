@@ -242,6 +242,38 @@ export async function addCharBossEntry(input: {
   return toCharBossEntry(data!);
 }
 
+/**
+ * 한 달치 입장 기록 — 달력 화면용.
+ *
+ * 경계는 [해당 월 1일, 다음 달 1일) 이다. 월말 계산을 직접 하지 않으려고 마지막 날 대신
+ * 다음 달 1일을 lt 로 잡는다 — 28/29/30/31 분기가 통째로 사라진다.
+ *
+ * 문자열 경계라 Postgres 가 서버 타임존(Supabase 기본 UTC)으로 해석한다. 달력은 로컬
+ * 날짜로 칸을 나누므로 월 경계 몇 시간이 어긋날 수 있지만, "지난달 말일 밤 기록이 이번 달
+ * 1일 칸에 보이는" 정도라 실사용에 문제가 없다.
+ */
+export async function getCharBossEntriesByMonth(
+  characterId: string,
+  year: number,
+  month: number,
+): Promise<CharBossEntry[]> {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const start = `${String(year)}-${pad(month)}-01`;
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const end = `${String(nextYear)}-${pad(nextMonth)}-01`;
+
+  const { data, error } = await supabase
+    .from('char_boss_entries')
+    .select('*')
+    .eq('character_id', characterId)
+    .gte('entered_at', start)
+    .lt('entered_at', end)
+    .order('entered_at', { ascending: false });
+  throwIfError(error);
+  return (data ?? []).map(toCharBossEntry);
+}
+
 export async function deleteCharBossEntry(id: string): Promise<void> {
   const { error } = await supabase.from('char_boss_entries').delete().eq('id', id);
   throwIfError(error);

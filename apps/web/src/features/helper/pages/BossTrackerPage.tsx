@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Shield, Timer } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { CalendarDays, Shield, Timer } from 'lucide-react';
 import { getCharacters } from '@/features/helper/api';
 import { useCharacterStore } from '@/stores/useCharacterStore';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -31,10 +32,19 @@ export function BossTrackerPage() {
       <PageHeader
         actions={
           selectedCharacterId && (
-            <Button onClick={() => setIsRegistrationOpen(true)} size="sm" variant="secondary">
-              <Shield className="h-4 w-4" />
-              보스 등록 관리
-            </Button>
+            <div className="flex items-center gap-2">
+              <Link
+                className="text-text-secondary hover:text-text-primary inline-flex items-center gap-1.5 text-sm font-medium transition-colors"
+                to="/boss-tracker/history"
+              >
+                <CalendarDays className="h-4 w-4" />
+                입장 기록
+              </Link>
+              <Button onClick={() => setIsRegistrationOpen(true)} size="sm" variant="secondary">
+                <Shield className="h-4 w-4" />
+                보스 등록 관리
+              </Button>
+            </div>
           )
         }
         description="입장을 기록하면 보스별 재입장 가능 시각을 계산해 보여줍니다."
