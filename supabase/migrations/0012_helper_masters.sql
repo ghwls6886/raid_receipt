@@ -97,8 +97,11 @@ on conflict (id) do update set
 
 -- ── 6. game_servers ──────────────────────────────────────
 -- maple_helper 의 servers 와 같은 개념이라 raid_receipt 이름(game_servers)을 유지하고
--- 컬럼만 흡수한다 (MERGE_PLAN §3). 참조하는 FK 가 아직 없어 교체가 자유롭다.
--- 0013 에서 들어올 characters.server_id 가 이 text id 를 참조하게 된다.
+-- 컬럼만 흡수한다 (MERGE_PLAN §3). 참조하는 FK 가 없어 교체가 자유롭다.
+--
+-- 이 표는 FK 대상이 아니라 **드롭다운 소스**다. 양쪽 다 서버를 자유 입력 text 로 들고 있다
+-- (raid_receipt `guilds.server_name`, maple_helper `characters.server_name`·`parties.server_name`).
+-- 0013 이관 때도 이 구조를 유지한다 — 지금 FK 로 조이면 기존 자유 입력 값이 전부 걸린다.
 alter table game_servers add column sort_order int         not null default 0;
 alter table game_servers add column is_active  boolean     not null default true;
 alter table game_servers add column created_at timestamptz not null default now();
