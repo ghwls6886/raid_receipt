@@ -216,9 +216,229 @@ export async function createRecruitPost(input: RecruitPostInput): Promise<string
   return data as unknown as string;
 }
 
+// ─── 파티원 ─────────────────────────────────────────────────
+export interface RecruitMember {
+  id: string;
+  userId: string;
+  characterId: string;
+  role: 'LEADER' | 'MEMBER';
+  joinedAt: string;
+  nickname: string | null;
+  job: string | null;
+  level: number | null;
+  statAttack: number | null;
+}
+
+interface MemberRow {
+  id: string;
+  user_id: string;
+  character_id: string;
+  role: string;
+  joined_at: string;
+  characters: { nickname: string; job: string; level: number; stat_attack: number | null } | null;
+}
+
+export async function getRecruitMembers(postId: string): Promise<RecruitMember[]> {
+  const { data, error } = await supabase
+    .from('recruit_post_members')
+    .select('*, characters(nickname, job, level, stat_attack)')
+    .eq('post_id', postId)
+    // 파티장이 항상 위로
+    .order('role')
+    .order('joined_at');
+  throwIfError(error);
+  return ((data as unknown as MemberRow[] | null) ?? []).map((r) => ({
+    id: r.id,
+    userId: r.user_id,
+    characterId: r.character_id,
+    role: r.role as RecruitMember['role'],
+    joinedAt: r.joined_at,
+    nickname: r.characters?.nickname ?? null,
+    job: r.characters?.job ?? null,
+    level: r.characters?.level ?? null,
+    statAttack: r.characters?.stat_attack ?? null,
+  }));
+}
+
+// ─── 지원 ───────────────────────────────────────────────────
+export interface RecruitApplication {
+  id: string;
+  postId: string;
+  userId: string;
+  characterId: string;
+  statAttack: number | null;
+  specText: string | null;
+  message: string | null;
+  createdAt: string;
+  nickname: string | null;
+  job: string | null;
+  level: number | null;
+}
+
+interface ApplicationRow {
+  id: string;
+  post_id: string;
+  user_id: string;
+  character_id: string;
+  stat_attack: number | null;
+  spec_text: string | null;
+  message: string | null;
+  created_at: string;
+  characters: { nickname: string; job: string; level: number } | null;
+}
+
+/** 대기 중인 신청만. 처리된 건 목록에 남을 이유가 없다 */
+export async function getRecruitApplications(postId: string): Promise<RecruitApplication[]> {
+  const { data, error } = await supabase
+    .from('recruit_applications')
+    .select('*, characters(nickname, job, level)')
+    .eq('post_id', postId)
+    .eq('status', 'PENDING')
+    .order('created_at');
+  throwIfError(error);
+  return ((data as unknown as ApplicationRow[] | null) ?? []).map((r) => ({
+    id: r.id,
+    postId: r.post_id,
+    userId: r.user_id,
+    characterId: r.character_id,
+    statAttack: r.stat_attack,
+    specText: r.spec_text,
+    message: r.message,
+    createdAt: r.created_at,
+    nickname: r.characters?.nickname ?? null,
+    job: r.characters?.job ?? null,
+    level: r.characters?.level ?? null,
+  }));
+}
+
+export interface ApplyInput {
+  postId: string;
+  characterId: string;
+  statAttack?: number | null;
+  specText?: string | null;
+  message?: string | null;
+}
+
+export async function applyToRecruit(input: ApplyInput): Promise<void> {
+  const { error } = await supabase.from('recruit_applications').insert({
+    post_id: input.postId,
+    user_id: await getUserId(),
+    character_id: input.characterId,
+    stat_attack: input.statAttack ?? null,
+    spec_text: input.specText ?? null,
+    message: input.message ?? null,
+  });
+  throwIfError(error);
+}
+
+/**
+ * 신청 수락/거절.
+ *
+ * 수락은 RPC 다 — 신청 상태 변경·멤버 추가·정원 확인이 한 트랜잭션이어야 한다.
+ * 거절은 상태만 바꾸면 되므로 직접 UPDATE (RLS 가 파티장인지 검사한다).
+ */
+export async function respondToApplication(applicationId: string, accept: boolean): Promise<void> {
+  if (accept) {
+    const { error } = await supabase.rpc('accept_recruit_application', {
+      p_application_id: applicationId,
+    });
+    throwIfError(error);
+    return;
+  }
+  const { error } = await supabase
+    .from('recruit_applications')
+    .update({ status: 'REJECTED' })
+    .eq('id', applicationId);
+  throwIfError(error);
+}
+
+// ─── 탈퇴 · 퇴장 ────────────────────────────────────────────
+// 셋 다 반환값이 평가 세션 id 다. 참가자가 2명 미만이면 세션이 안 만들어져 null.
+
+export async function leaveRecruitPost(postId: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('leave_recruit_post', { p_post_id: postId });
+  throwIfError(error);
+  return (data as unknown as string | null) ?? null;
+}
+
+export async function kickRecruitMember(postId: string, userId: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('kick_recruit_member', {
+    p_post_id: postId,
+    p_user_id: userId,
+  });
+  throwIfError(error);
+  return (data as unknown as string | null) ?? null;
+}
+
 /** 해산 — 파티장 전용. 반환값은 평가 세션 id (참가자 2명 미만이면 null) */
 export async function closeRecruitPost(postId: string): Promise<string | null> {
   const { data, error } = await supabase.rpc('close_recruit_post', { p_post_id: postId });
   throwIfError(error);
   return (data as unknown as string | null) ?? null;
+}
+
+// ─── 채팅 ───────────────────────────────────────────────────
+// 해산하면 close_recruit_post 가 즉시 지운다. 조회 RLS 도 CLOSED 를 걸러내므로
+// 삭제가 누락돼도 노출되지 않는다 (§8 용량 정책).
+
+export interface RecruitMessage {
+  id: string;
+  postId: string;
+  userId: string;
+  nickname: string;
+  message: string;
+  createdAt: string;
+}
+
+/** 한 번에 불러오는 최근 메시지 수 */
+export const CHAT_PAGE_SIZE = 100;
+/** 본문 길이 상한 — 0015 의 CHECK(1~500)와 맞춘다 */
+export const CHAT_MAX_LENGTH = 500;
+
+export function toRecruitMessage(row: Record<string, unknown>): RecruitMessage {
+  return {
+    id: row.id as string,
+    postId: row.post_id as string,
+    userId: row.user_id as string,
+    nickname: row.nickname as string,
+    message: row.message as string,
+    createdAt: row.created_at as string,
+  };
+}
+
+/** 최근 CHAT_PAGE_SIZE 건을 오래된 순으로 반환한다 */
+export async function getRecruitMessages(postId: string): Promise<RecruitMessage[]> {
+  const { data, error } = await supabase
+    .from('recruit_messages')
+    .select('*')
+    .eq('post_id', postId)
+    .order('created_at', { ascending: false })
+    .limit(CHAT_PAGE_SIZE);
+  throwIfError(error);
+  // 최신순으로 가져온 뒤 화면 표시용으로 뒤집는다
+  return (data ?? [])
+    .map((r) => toRecruitMessage(r as unknown as Record<string, unknown>))
+    .reverse();
+}
+
+export async function sendRecruitMessage(input: {
+  postId: string;
+  nickname: string;
+  message: string;
+}): Promise<RecruitMessage> {
+  const message = input.message.trim().slice(0, CHAT_MAX_LENGTH);
+  if (!message) throw new Error('메시지를 입력해주세요.');
+
+  const { data, error } = await supabase
+    .from('recruit_messages')
+    .insert({
+      post_id: input.postId,
+      user_id: await getUserId(),
+      nickname: input.nickname,
+      message,
+    })
+    .select()
+    .single();
+  throwIfError(error);
+  return toRecruitMessage(data as unknown as Record<string, unknown>);
 }

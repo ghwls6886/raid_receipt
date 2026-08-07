@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Plus, UsersRound, ArrowRight } from 'lucide-react';
 import {
   getMyRecruitCharacters,
@@ -19,9 +20,11 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { RecruitCategorySidebar } from '@/features/recruit/components/RecruitCategorySidebar';
 import { RecruitCard } from '@/features/recruit/components/RecruitCard';
 import { RecruitCreateModal } from '@/features/recruit/components/RecruitCreateModal';
+import { RecruitApplyModal } from '@/features/recruit/components/RecruitApplyModal';
 
 /** 파티 구인 목록 (MERGE_PLAN §7 4단계) */
 export function RecruitPage() {
+  const navigate = useNavigate();
   const session = useAuthStore((s) => s.session);
   const myUserId = session?.user.id ?? null;
 
@@ -33,6 +36,7 @@ export function RecruitPage() {
   const setSelectedCharacterId = useRecruitStore((s) => s.setSelectedCharacterId);
 
   const [showCreate, setShowCreate] = useState(false);
+  const [applyTarget, setApplyTarget] = useState<RecruitPost | null>(null);
 
   // 카테고리는 클라이언트에서 거른다 — 사이드바 카운트 배지를 그리려면
   // 어차피 카테고리 필터가 걸리지 않은 전체 목록이 필요하기 때문이다.
@@ -128,13 +132,11 @@ export function RecruitPage() {
       toast.warning('이미 다른 파티에 소속되어 있습니다.');
       return;
     }
-    // TODO 신청 모달은 다음 이식분
-    toast.info('신청 화면은 준비 중입니다.');
+    setApplyTarget(post);
   };
 
-  // TODO 파티 상세(파티방)는 다음 이식분
   const handleView = (post: RecruitPost) => {
-    toast.info(`«${post.title}» 파티방은 준비 중입니다.`);
+    navigate(`/recruit/${post.id}`);
   };
 
   return (
@@ -268,6 +270,15 @@ export function RecruitPage() {
         isOpen={showCreate}
         onClose={() => setShowCreate(false)}
       />
+
+      {applyTarget && (
+        <RecruitApplyModal
+          characters={usableCharacters}
+          defaultCharacterId={selectedCharacterId}
+          onClose={() => setApplyTarget(null)}
+          post={applyTarget}
+        />
+      )}
     </div>
   );
 }
