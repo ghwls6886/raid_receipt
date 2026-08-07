@@ -39,23 +39,57 @@ function cooldownError(hours: number): string | null {
   return null;
 }
 
-/** SYS 관리자 전용 — 일반 authenticated 는 GRANT 없음 */
+/**
+ * 마스터 id 생성 — bosses·game_servers 는 text PK 라 DB 기본값이 없다 (0012).
+ *
+ * 0012 가 넣은 큐레이션 마스터는 'zakum' 같은 읽기 좋은 슬러그를 쓰지만, 한글 이름에서
+ * 슬러그를 자동으로 뽑을 방법이 마땅치 않다. 화면에 노출되는 값도 아니므로 관리자가
+ * 추가한 행은 생성 id 를 쓴다. 접두어로 출처가 구분된다.
+ */
+function makeMasterId(prefix: string): string {
+  return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+/**
+ * 시스템 관리자 전용 (0014). admins 에 없는 계정은 RLS 가 막아 42501 이 온다.
+ * cycle·difficulty·sort_order·max_entries 는 DB 기본값(DAILY·normal·0·2)을 따른다.
+ */
 export async function addBoss(name: string, cooldownHours = DEFAULT_COOLDOWN_HOURS): Promise<Boss> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error('보스 이름을 입력해 주세요.');
   const invalid = cooldownError(cooldownHours);
   if (invalid) throw new Error(invalid);
-  throw new Error('보스 추가는 시스템 관리자 전용입니다.');
+
+  const { data, error } = await supabase
+    .from('bosses')
+    .insert({ id: makeMasterId('boss'), name: trimmed, cooldown_hours: cooldownHours })
+    .select('id, name, cooldown_hours')
+    .single();
+  throwIfError(error);
+  return { id: data!.id, name: data!.name, cooldownHours: data!.cooldown_hours };
 }
 
-export async function updateBossCooldown(_id: string, cooldownHours: number): Promise<Boss> {
+export async function updateBossCooldown(id: string, cooldownHours: number): Promise<Boss> {
   const invalid = cooldownError(cooldownHours);
   if (invalid) throw new Error(invalid);
-  throw new Error('쿨타임 변경은 시스템 관리자 전용입니다.');
+
+  const { data, error } = await supabase
+    .from('bosses')
+    .update({ cooldown_hours: cooldownHours })
+    .eq('id', id)
+    .select('id, name, cooldown_hours')
+    .single();
+  throwIfError(error);
+  return { id: data!.id, name: data!.name, cooldownHours: data!.cooldown_hours };
 }
 
-export async function deleteBoss(_id: string): Promise<void> {
-  throw new Error('보스 삭제는 시스템 관리자 전용입니다.');
+/**
+ * 보스를 지우면 개인 추적·기록도 같이 사라진다 (user_boss_tracking·char_boss_entries 는
+ * on delete cascade). 정산 쪽 boss_entries 는 set null + boss_name 스냅샷이라 남는다.
+ */
+export async function deleteBoss(id: string): Promise<void> {
+  const { error } = await supabase.from('bosses').delete().eq('id', id);
+  throwIfError(error);
 }
 
 // ─── 서버 마스터 ────────────────────────────────────────────
@@ -70,11 +104,22 @@ export async function getServers(): Promise<GameServer[]> {
   return data ?? [];
 }
 
-export async function addServer(_name: string): Promise<GameServer> {
-  throw new Error('서버 추가는 시스템 관리자 전용입니다.');
+/** 시스템 관리자 전용 (0014) */
+export async function addServer(name: string): Promise<GameServer> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('서버 이름을 입력해 주세요.');
+
+  const { data, error } = await supabase
+    .from('game_servers')
+    .insert({ id: makeMasterId('server'), name: trimmed })
+    .select('id, name')
+    .single();
+  throwIfError(error);
+  return data!;
 }
 
-export async function deleteServer(_id: string): Promise<void> {
-  throw new Error('서버 삭제는 시스템 관리자 전용입니다.');
+export async function deleteServer(id: string): Promise<void> {
+  const { error } = await supabase.from('game_servers').delete().eq('id', id);
+  throwIfError(error);
 }
 

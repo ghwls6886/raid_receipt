@@ -174,6 +174,165 @@ export type Database = {
         }
         Relationships: []
       }
+      char_boss_entries: {
+        Row: {
+          boss_id: string
+          boss_name: string
+          character_id: string
+          created_at: string
+          entered_at: string
+          id: string
+          note: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          boss_id: string
+          boss_name: string
+          character_id: string
+          created_at?: string
+          entered_at?: string
+          id?: string
+          note?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          boss_id?: string
+          boss_name?: string
+          character_id?: string
+          created_at?: string
+          entered_at?: string
+          id?: string
+          note?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "char_boss_entries_boss_id_fkey"
+            columns: ["boss_id"]
+            isOneToOne: false
+            referencedRelation: "bosses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "char_boss_entries_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      characters: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          job: string
+          job_category: string
+          level: number
+          nickname: string
+          server_name: string
+          stat_attack: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          job?: string
+          job_category: string
+          level?: number
+          nickname: string
+          server_name?: string
+          stat_attack?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          job?: string
+          job_category?: string
+          level?: number
+          nickname?: string
+          server_name?: string
+          stat_attack?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      checklist_completions: {
+        Row: {
+          character_id: string
+          completed_at: string
+          id: string
+          period_date: string
+          template_id: string
+        }
+        Insert: {
+          character_id: string
+          completed_at?: string
+          id?: string
+          period_date: string
+          template_id: string
+        }
+        Update: {
+          character_id?: string
+          completed_at?: string
+          id?: string
+          period_date?: string
+          template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "checklist_completions_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "checklist_completions_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "checklist_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      checklist_templates: {
+        Row: {
+          created_at: string
+          cycle: Database["public"]["Enums"]["boss_cycle"]
+          id: string
+          is_active: boolean
+          name: string
+          sort_order: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          cycle?: Database["public"]["Enums"]["boss_cycle"]
+          id?: string
+          is_active?: boolean
+          name: string
+          sort_order?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          cycle?: Database["public"]["Enums"]["boss_cycle"]
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       credit_logs: {
         Row: {
           created_at: string
@@ -938,6 +1097,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_boss_tracking: {
+        Row: {
+          boss_id: string
+          character_id: string
+          notify_enabled: boolean
+          user_id: string
+        }
+        Insert: {
+          boss_id: string
+          character_id: string
+          notify_enabled?: boolean
+          user_id: string
+        }
+        Update: {
+          boss_id?: string
+          character_id?: string
+          notify_enabled?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_boss_tracking_boss_id_fkey"
+            columns: ["boss_id"]
+            isOneToOne: false
+            referencedRelation: "bosses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_boss_tracking_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_profiles: {
+        Row: {
+          created_at: string
+          display_name: string
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string
+          id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          id?: string
+        }
+        Relationships: []
       }
     }
     Views: {
