@@ -13,6 +13,8 @@ import {
   LogOut,
   Wrench,
   BookOpen,
+  Plus,
+  type LucideIcon,
 } from 'lucide-react';
 import { Logo } from '@/components/common/Logo';
 import { useThemeStore } from '@/stores/useThemeStore';
@@ -20,13 +22,28 @@ import { useGuildStore, useCurrentGuild } from '@/stores/useGuildStore';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { cn } from '@/lib/cn';
 
-const NAV_ITEMS = [
+interface NavItem {
+  to: string;
+  label: string;
+  Icon: LucideIcon;
+  end: boolean;
+}
+
+/** 길드가 있어야 의미가 있는 화면들 */
+const SETTLEMENT_NAV: readonly NavItem[] = [
   { to: '/dashboard', label: '대시보드', Icon: LayoutDashboard, end: true },
   { to: '/raids', label: '레이드', Icon: ScrollText, end: false },
   { to: '/parties', label: '공대 구성', Icon: Swords, end: false },
   { to: '/members', label: '공대원', Icon: Users, end: false },
   { to: '/settings', label: '길드 설정', Icon: Settings, end: false },
-] as const;
+];
+
+/**
+ * 길드 없이 쓰는 화면들 — 개인 도구.
+ * 2단계에서 캐릭터·숙제·보스추적·버프콜이 여기 붙는다 (MERGE_PLAN §7 2단계).
+ * 그때까지는 비어 있고, 비면 내비 행 자체를 그리지 않는다.
+ */
+const HELPER_NAV: readonly NavItem[] = [];
 
 /**
  * 상단 탑바 — 사이드바 없는 SaaS 셸.
@@ -35,6 +52,13 @@ const NAV_ITEMS = [
 export function TopNav() {
   const { theme, toggleTheme } = useThemeStore();
   const navigate = useNavigate();
+  /**
+   * 길드가 없는 사용자도 이 셸을 쓴다 (MERGE_PLAN 함정 7).
+   * useCurrentGuild 는 길드가 없으면 빈 Guild 를 돌려주므로, 분기하지 않으면
+   * 스위처가 이름 없는 빈 껍데기로 그려지고 정산 탭들이 온보딩으로 튕긴다.
+   */
+  const hasGuild = useGuildStore((s) => s.guilds.length > 0);
+  const navItems = hasGuild ? SETTLEMENT_NAV : HELPER_NAV;
 
   return (
     <header className="border-border-subtle bg-bg-card/95 sticky top-0 z-30 border-b backdrop-blur">
@@ -50,19 +74,22 @@ export function TopNav() {
             </span>
           </div>
           <div className="bg-border-subtle mx-1 h-5 w-px" />
-          <GuildSwitcher />
+          {hasGuild ? <GuildSwitcher /> : <CreateGuildButton />}
         </div>
 
         <div className="flex items-center gap-1.5">
           <BetaPill />
-          <button
-            aria-label="매뉴얼"
-            className="text-text-secondary hover:bg-bg-hover rounded-md p-2"
-            onClick={() => navigate('/manual')}
-            type="button"
-          >
-            <BookOpen className="h-5 w-5" />
-          </button>
+          {/* 매뉴얼은 정산 사용법 문서다. 길드가 없으면 눌러도 온보딩으로 튕긴다. */}
+          {hasGuild && (
+            <button
+              aria-label="매뉴얼"
+              className="text-text-secondary hover:bg-bg-hover rounded-md p-2"
+              onClick={() => navigate('/manual')}
+              type="button"
+            >
+              <BookOpen className="h-5 w-5" />
+            </button>
+          )}
           <button
             aria-label="테마 전환"
             className="text-text-secondary hover:bg-bg-hover rounded-md p-2"
@@ -75,28 +102,48 @@ export function TopNav() {
         </div>
       </div>
 
-      {/* 내비 행 (언더라인 탭) */}
-      <nav className="mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-2 sm:px-4">
-        {NAV_ITEMS.map(({ to, label, Icon, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) =>
-              cn(
-                'flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium whitespace-nowrap transition-colors',
-                isActive
-                  ? 'border-brand-600 text-text-primary'
-                  : 'text-text-secondary hover:text-text-primary border-transparent',
-              )
-            }
-          >
-            <Icon className="h-4 w-4" />
-            {label}
-          </NavLink>
-        ))}
-      </nav>
+      {/* 내비 행 (언더라인 탭) — 갈 곳이 없으면 빈 막대를 남기지 않는다 */}
+      {navItems.length > 0 && (
+        <nav className="mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-2 sm:px-4">
+          {navItems.map(({ to, label, Icon, end }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              className={({ isActive }) =>
+                cn(
+                  'flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-sm font-medium whitespace-nowrap transition-colors',
+                  isActive
+                    ? 'border-brand-600 text-text-primary'
+                    : 'text-text-secondary hover:text-text-primary border-transparent',
+                )
+              }
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+      )}
     </header>
+  );
+}
+
+/**
+ * 길드가 없을 때 길드 스위처 자리를 대신한다.
+ * 3단계에서 여기가 제품 스위처(정산 ↔ 파티모집)로 확장된다 — MERGE_PLAN §6.
+ */
+function CreateGuildButton() {
+  const navigate = useNavigate();
+  return (
+    <button
+      className="text-text-secondary hover:bg-bg-hover hover:text-text-primary flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-medium"
+      onClick={() => navigate('/onboarding')}
+      type="button"
+    >
+      <Plus className="h-4 w-4" />
+      길드 만들기
+    </button>
   );
 }
 

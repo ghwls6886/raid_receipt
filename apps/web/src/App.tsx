@@ -46,6 +46,22 @@ function App() {
             }
             path="/onboarding"
           />
+          {/*
+            길드 불필요 — 로그인만 하면 되는 화면 (MERGE_PLAN §4).
+            2단계에서 개인 도구(캐릭터·숙제·보스추적·버프콜)가 이 그룹에 붙는다.
+            404 를 여기 둔 이유: 오타 URL 하나 때문에 길드 생성을 요구할 이유가 없다.
+          */}
+          <Route
+            element={
+              <RequireAuth>
+                <Layout />
+              </RequireAuth>
+            }
+          >
+            <Route element={<NotFoundPage />} path="*" />
+          </Route>
+
+          {/* 길드 필수 — 정산·공대·멤버 */}
           <Route
             element={
               <RequireAuth requireOnboarded>
@@ -62,7 +78,6 @@ function App() {
             <Route element={<GuildSettingsPage />} path="settings" />
             <Route element={<AdminPage />} path="admin" />
             <Route element={<ManualPage />} path="manual" />
-            <Route element={<NotFoundPage />} path="*" />
           </Route>
         </Routes>
       </BrowserRouter>

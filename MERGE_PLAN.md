@@ -274,16 +274,28 @@ apps/web/src/
       · `throwIfError` → `lib/supabase.ts`
       ↳ `stores/useGuildStore` 가 `@/lib/api` 를 참조하던 역방향 의존이 이때 끊겼다
 
-**라우팅** (§4)
+**라우팅** (§4) · **완료 2026-08-07**
 
-- [ ] 길드 불필요 라우트 그룹 추가 — `RequireAuth` 를 `requireOnboarded` **없이** 감싼 두 번째 `Layout` 그룹
-      ↳ 가드는 이미 옵션화돼 있다. 개조가 아니라 라우트 추가다 — 함정 4
-- [ ] `TopNav` 길드 의존 분기 — 길드 없으면 길드 스위처 대신 제품 스위처, NAV_ITEMS 도 제품별 분리 — 함정 7
+- [x] 길드 불필요 라우트 그룹 추가 — `RequireAuth` 를 `requireOnboarded` **없이** 감싼 두 번째 `Layout` 그룹
+      ↳ 가드는 이미 옵션화돼 있어 개조 없이 라우트만 추가했다 — 함정 4
+      ↳ 404(`path="*"`)를 이 그룹으로 옮겼다. 오타 URL 때문에 길드 생성을 요구할 이유가 없다
+      ↳ 개인 도구 라우트는 2단계에 이 그룹으로 들어온다
+- [x] `TopNav` 길드 의존 분기 — 함정 7
+      ↳ `NAV_ITEMS` → `SETTLEMENT_NAV` / `HELPER_NAV`. `HELPER_NAV` 는 2단계까지 비어 있고,
+        비면 내비 행 자체를 그리지 않는다
+      ↳ 길드 없으면 길드 스위처 대신 `CreateGuildButton`. 이 자리가 3단계에 제품 스위처로 확장된다 (§6)
+      ↳ 매뉴얼 버튼도 길드 있을 때만 — 없으면 눌러도 온보딩으로 튕긴다
 
 **DB**
 
-- [ ] `0012_helper_masters.sql` — `bosses` 교체, `game_servers` 흡수, `boss_entries.boss_id` uuid→text
-- [ ] `pnpm db:types` 재생성 → `database.types.ts`
+- [x] `0012_helper_masters.sql` — `bosses` 교체, `game_servers` 흡수, `boss_entries.boss_id` uuid→text
+      ↳ 기존 행은 **이름으로 슬러그 매핑**해 살린다. RR 보스 6종 이름이 helper 8종에 모두 있다
+      ↳ 보스 마스터 정본을 seed 가 아니라 마이그레이션에 뒀다 — seed 는 운영에서 실행되지 않는데
+        helper 코드는 슬러그 id 를 전제한다
+      ↳ FE 영향 없음: `getBosses`/`getServers` 는 컬럼명이 같고 쓰기 경로는 전부 관리자 전용 스텁이다
+- [ ] **`pnpm db:types` 재생성 → `database.types.ts`** ← Docker 미가동으로 미실행. 적용 전 필수
+      ↳ `pnpm db:start && pnpm db:reset && pnpm db:types`
+      ↳ 0012 는 아직 **어떤 DB 에도 적용되지 않았다**. 실행 검증 전이다
 
 ### 2단계 — 개인 도구 이식
 
