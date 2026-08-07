@@ -314,7 +314,15 @@ apps/web/src/
         5종이 정확히 같았고, helper 가 settlement 을 import 하면 안 된다 (§4.1 원칙 3)
       ↳ `lib/masters.ts` 에 `getActiveServers()` 추가 — 폼은 활성 서버만, 관리 화면은 전체
       ↳ 라우트 `/characters` 를 길드 불필요 그룹에, `HELPER_NAV` 첫 항목 배선
-- [ ] 일일·주간 숙제 (`daily-checklist` 5 컴포넌트)
+- [x] 일일·주간 숙제 (`daily-checklist`) (2026-08-07)
+      ↳ 컴포넌트 5 → **3**. `DailyChecklistView`·`WeeklyChecklistView` 는 상수만 채우는
+        17줄 래퍼라 페이지에서 `periodDate` 를 계산해 넘긴다
+      ↳ `lib/date.ts` 신규 — 기간 키를 **KST 고정**으로 계산한다. 브라우저 타임존을 쓰면
+        해외·시계 오차에서 초기화 시점이 어긋나 어제 숙제가 오늘 것으로 보인다
+      ↳ MH 의 `.single()` 오류 삼킴 2곳을 `.maybeSingle()` 로 교체.
+        "첫 항목 추가"와 "미완료 항목 체크"가 **정상 경로인데 에러가 나던** 자리다
+      ↳ 항목 삭제 버튼 추가 — `removeChecklistTemplate` 이 MH 에선 정의만 되고
+        화면에 연결돼 있지 않았다
 - [ ] 개인 보스 추적 (`boss-tracker` 6 컴포넌트, `useBosses`, `useNow`)
 - [ ] **버프콜** — `buff-call` 8 컴포넌트, `useAudioAlert` · `useWakeLock`,
       `lib/audio.ts` · `buffTimer.ts` · `buffTimerRunner.ts`,

@@ -147,3 +147,155 @@ export async function reactivateCharacter(id: string): Promise<void> {
   const { error } = await supabase.from('characters').update({ is_active: true }).eq('id', id);
   throwIfError(error);
 }
+
+// ─── 숙제 체크리스트 ────────────────────────────────────────
+// 항목 정의(템플릿)는 **계정 단위**, 완료 기록은 **캐릭터 × 기간** 단위다.
+// 그래서 캐릭터를 여럿 키우면 같은 "자쿰" 항목이 캐릭터마다 따로 체크된다.
+
+/** DB 의 boss_cycle enum 과 같은 값 (0012 에서 만들고 0013 이 재사용) */
+export type ChecklistCycle = 'DAILY' | 'WEEKLY';
+
+export interface ChecklistTemplate {
+  id: string;
+  userId: string;
+  name: string;
+  cycle: ChecklistCycle;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface ChecklistCompletion {
+  id: string;
+  templateId: string;
+  characterId: string;
+  /** 기간 키 "YYYY-MM-DD" — 일간은 그날, 주간은 그 주 월요일 (@/lib/date) */
+  periodDate: string;
+  completedAt: string;
+}
+
+function toTemplate(r: {
+  id: string;
+  user_id: string;
+  name: string;
+  cycle: string;
+  sort_order: number;
+  is_active: boolean;
+}): ChecklistTemplate {
+  return {
+    id: r.id,
+    userId: r.user_id,
+    name: r.name,
+    cycle: r.cycle as ChecklistCycle,
+    sortOrder: r.sort_order,
+    isActive: r.is_active,
+  };
+}
+
+function toCompletion(r: {
+  id: string;
+  template_id: string;
+  character_id: string;
+  period_date: string;
+  completed_at: string;
+}): ChecklistCompletion {
+  return {
+    id: r.id,
+    templateId: r.template_id,
+    characterId: r.character_id,
+    periodDate: r.period_date,
+    completedAt: r.completed_at,
+  };
+}
+
+export async function getChecklistTemplates(): Promise<ChecklistTemplate[]> {
+  const { data, error } = await supabase
+    .from('checklist_templates')
+    .select('*')
+    .eq('is_active', true)
+    .order('sort_order');
+  throwIfError(error);
+  return (data ?? []).map(toTemplate);
+}
+
+export async function addChecklistTemplate(input: {
+  name: string;
+  cycle: ChecklistCycle;
+}): Promise<ChecklistTemplate> {
+  const name = input.name.trim();
+  if (!name) throw new Error('항목 이름을 입력해 주세요.');
+
+  const userId = await getUserId();
+
+  // 새 항목은 맨 아래에 붙인다. maybeSingle 이어야 한다 — single 은 첫 항목일 때
+  // 0행이라 에러를 내고, 그러면 에러를 삼켜야만 동작하는 코드가 된다.
+  const { data: last, error: lastError } = await supabase
+    .from('checklist_templates')
+    .select('sort_order')
+    .eq('user_id', userId)
+    .order('sort_order', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  throwIfError(lastError);
+
+  const { data, error } = await supabase
+    .from('checklist_templates')
+    .insert({ user_id: userId, name, cycle: input.cycle, sort_order: (last?.sort_order ?? 0) + 1 })
+    .select()
+    .single();
+  throwIfError(error);
+  return toTemplate(data!);
+}
+
+/**
+ * 지우지 않고 비활성화한다. checklist_completions 가 template_id 를
+ * on delete cascade 로 물고 있어(0013), 삭제하면 지난 완료 기록이 통째로 날아간다.
+ */
+export async function removeChecklistTemplate(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('checklist_templates')
+    .update({ is_active: false })
+    .eq('id', id);
+  throwIfError(error);
+}
+
+export async function getChecklistCompletions(
+  characterId: string,
+  periodDate: string,
+): Promise<ChecklistCompletion[]> {
+  const { data, error } = await supabase
+    .from('checklist_completions')
+    .select('*')
+    .eq('character_id', characterId)
+    .eq('period_date', periodDate);
+  throwIfError(error);
+  return (data ?? []).map(toCompletion);
+}
+
+/** 체크 토글 — 반환값은 토글 후의 완료 여부 */
+export async function toggleChecklistCompletion(
+  templateId: string,
+  characterId: string,
+  periodDate: string,
+): Promise<boolean> {
+  // 미완료가 정상 경로다. single 이면 체크할 때마다 에러가 나므로 maybeSingle 을 쓴다.
+  const { data: existing, error: findError } = await supabase
+    .from('checklist_completions')
+    .select('id')
+    .eq('template_id', templateId)
+    .eq('character_id', characterId)
+    .eq('period_date', periodDate)
+    .maybeSingle();
+  throwIfError(findError);
+
+  if (existing) {
+    const { error } = await supabase.from('checklist_completions').delete().eq('id', existing.id);
+    throwIfError(error);
+    return false;
+  }
+
+  const { error } = await supabase
+    .from('checklist_completions')
+    .insert({ template_id: templateId, character_id: characterId, period_date: periodDate });
+  throwIfError(error);
+  return true;
+}

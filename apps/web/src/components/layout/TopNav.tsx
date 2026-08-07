@@ -5,6 +5,7 @@ import {
   ScrollText,
   Swords,
   Sword,
+  ListChecks,
   Users,
   Settings,
   Moon,
@@ -45,6 +46,7 @@ const SETTLEMENT_NAV: readonly NavItem[] = [
  */
 const HELPER_NAV: readonly NavItem[] = [
   { to: '/characters', label: '캐릭터', Icon: Sword, end: false },
+  { to: '/checklist', label: '숙제', Icon: ListChecks, end: false },
 ];
 
 /**
