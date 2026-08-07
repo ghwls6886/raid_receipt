@@ -14,6 +14,7 @@ import {
 import { categoryLabel } from '@/features/recruit/constants';
 import { usePendingRatingSessions, useRatingSession } from '@/features/recruit/manner/hooks';
 import { RatingFlowModal } from '@/features/recruit/manner/RatingFlowModal';
+import { BuffCallPanel } from '@/features/recruit/buff/BuffCallPanel';
 import { useAuthStore } from '@/stores/useAuthStore';
 import { confirm } from '@/stores/useConfirmStore';
 import { toast } from '@/stores/useToastStore';
@@ -298,7 +299,8 @@ export function RecruitDetailPage() {
             />
           </Card>
 
-          {/* TODO 심콜(버프콜) 패널 — 다음 이식분 */}
+          {/* 심콜 — 파티원에게만 보인다. 구경 중인 사람에게는 의미가 없다 */}
+          {amMember && !isClosed && <BuffCallPanel canEdit={isLeader} post={post} />}
 
           {isLeader && !isClosed && (
             <Card className="p-4">

@@ -79,6 +79,19 @@ export interface RecruitPost {
   leaderLevel: number | null;
   /** 현재 인원 (파티장 포함) */
   memberCount: number;
+  /** 심콜 스킬 구성 — 파티장이 정하고 파티원 전원이 공유한다 */
+  buffSkills: RecruitBuffSkill[];
+  /** 심콜 실행 기준 시각 (ISO). null 이면 정지 상태 */
+  buffStartedAt: string | null;
+}
+
+/** recruit_posts.buff_skills 원소 (stores/useBuffCallStore 의 BuffSkill 과 같은 형태) */
+export interface RecruitBuffSkill {
+  id: string;
+  name: string;
+  intervalSec: number;
+  alertText: string;
+  enabled: boolean;
 }
 
 /** PostgREST 조인 결과의 형태 — 관계 컬럼은 객체 또는 배열로 온다 */
@@ -96,8 +109,34 @@ interface PostRow {
   status: string;
   server_name: string;
   created_at: string;
+  buff_skills: unknown;
+  buff_started_at: string | null;
   characters: { nickname: string; job: string; level: number } | null;
   recruit_post_members: { count: number }[];
+}
+
+/**
+ * jsonb 는 무엇이든 들어올 수 있다 — 컬럼 제약은 "배열"까지만 보장한다.
+ * 형태가 어긋난 원소는 통째로 버린다. 하나 깨졌다고 심콜 전체가 죽는 것보다
+ * 그 스킬만 사라지는 편이 낫다.
+ */
+function toBuffSkills(raw: unknown): RecruitBuffSkill[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const s = item as Record<string, unknown>;
+    if (typeof s.id !== 'string' || typeof s.name !== 'string') return [];
+    if (typeof s.intervalSec !== 'number' || s.intervalSec <= 0) return [];
+    return [
+      {
+        id: s.id,
+        name: s.name,
+        intervalSec: s.intervalSec,
+        alertText: typeof s.alertText === 'string' ? s.alertText : s.name,
+        enabled: s.enabled !== false,
+      },
+    ];
+  });
 }
 
 const SELECT_WITH_JOINS = '*, characters(nickname, job, level), recruit_post_members(count)';
@@ -122,6 +161,8 @@ function toPost(r: PostRow): RecruitPost {
     leaderLevel: r.characters?.level ?? null,
     // 집계는 [{ count: n }] 로 온다. 0건이면 배열이 비어 있다.
     memberCount: r.recruit_post_members[0]?.count ?? 0,
+    buffSkills: toBuffSkills(r.buff_skills),
+    buffStartedAt: r.buff_started_at,
   };
 }
 
@@ -441,4 +482,34 @@ export async function sendRecruitMessage(input: {
     .single();
   throwIfError(error);
   return toRecruitMessage(data as unknown as Record<string, unknown>);
+}
+
+// ─── 심콜(버프콜) ───────────────────────────────────────────────
+/**
+ * 스킬 구성과 실행 시각은 **글에 있고 파티장만 쓴다.**
+ *
+ * 개인 설정이 아니라 파티 설정인 이유: 전원이 같은 기준 시각을 봐야 주기가
+ * 정렬돼 동시에 울린다. 각자 시작하면 몇 초씩 어긋나서 콜이 겹친다.
+ *
+ * RPC 가 아니라 직접 UPDATE 인 것은 recruit_posts_update_leader 정책이
+ * 이미 파티장만 통과시키기 때문이다 — 여기서 더 막을 게 없다.
+ */
+export async function updateBuffSkills(
+  postId: string,
+  skills: readonly RecruitBuffSkill[],
+): Promise<void> {
+  const { error } = await supabase
+    .from('recruit_posts')
+    .update({ buff_skills: skills as unknown as never })
+    .eq('id', postId);
+  throwIfError(error);
+}
+
+/** startedAt 이 null 이면 정지 */
+export async function updateBuffTimer(postId: string, startedAt: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('recruit_posts')
+    .update({ buff_started_at: startedAt })
+    .eq('id', postId);
+  throwIfError(error);
 }

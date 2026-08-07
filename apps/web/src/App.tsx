@@ -21,6 +21,7 @@ import { BossHistoryPage } from '@/features/helper/pages/BossHistoryPage';
 import { RecruitPage } from '@/features/recruit/pages/RecruitPage';
 import { RecruitDetailPage } from '@/features/recruit/pages/RecruitDetailPage';
 import { RatingsPage } from '@/features/recruit/pages/RatingsPage';
+import { BuffTimerHost } from '@/features/recruit/buff/BuffTimerHost';
 // 메인 기능 — 로그인 + 길드 선택 완료 후
 import { DashboardPage } from '@/features/settlement/pages/DashboardPage';
 import { RaidsPage } from '@/features/settlement/pages/RaidsPage';
@@ -44,6 +45,13 @@ function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
+        {/*
+          심콜 알림 재생기 — 렌더하는 것은 없다. 파티방 안에 두면 화면을
+          옮기는 순간 소리가 끊기므로 라우트 바깥에 상주시킨다. 공용
+          Layout 이 아니라 여기 두는 이유는, Layout 이 특정 feature 를
+          알게 되면 공용 레이어가 오염되기 때문이다 (§4.1).
+        */}
+        <BuffTimerHost />
         <Routes>
           {/*
             랜딩 3분할 (MERGE_PLAN §5). 광고 클릭은 제품 랜딩으로 **직행**한다 —
