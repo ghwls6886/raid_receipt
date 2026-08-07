@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
+  Receipt,
   ScrollText,
   Swords,
   Sword,
@@ -43,13 +44,58 @@ const SETTLEMENT_NAV: readonly NavItem[] = [
 
 /**
  * 길드 없이 쓰는 화면들 — 개인 도구 (MERGE_PLAN §7 2단계).
- * 숙제·보스추적·버프콜이 순서대로 여기 붙는다. 비면 내비 행 자체를 그리지 않는다.
+ * 구인이 4단계에 여기 붙는다. 비면 내비 행 자체를 그리지 않는다.
  */
 const HELPER_NAV: readonly NavItem[] = [
   { to: '/characters', label: '캐릭터', Icon: Sword, end: false },
   { to: '/checklist', label: '숙제', Icon: ListChecks, end: false },
   { to: '/boss-tracker', label: '보스 타이머', Icon: Timer, end: false },
 ];
+
+type ProductKey = 'settlement' | 'helper';
+
+interface Product {
+  key: ProductKey;
+  label: string;
+  Icon: LucideIcon;
+  /** 이 제품의 첫 화면 */
+  home: string;
+  nav: readonly NavItem[];
+  note: string;
+}
+
+const PRODUCTS: Product[] = [
+  {
+    key: 'settlement',
+    label: '정산 매니저',
+    Icon: Receipt,
+    home: '/dashboard',
+    nav: SETTLEMENT_NAV,
+    note: '길드 레이드 정산',
+  },
+  {
+    key: 'helper',
+    label: '헬퍼',
+    Icon: Sword,
+    home: '/characters',
+    nav: HELPER_NAV,
+    note: '보스 타이머 · 숙제',
+  },
+];
+
+/**
+ * 지금 어느 제품에 있는가 — **경로로 판정한다.**
+ *
+ * 길드 유무로 고르면 안 된다. 길드가 있는 사람도 캐릭터·숙제·보스타이머를 쓰는데,
+ * 그렇게 하면 길드원에게 헬퍼 내비가 영영 안 보인다(제품 스위처 이전의 버그).
+ * 헬퍼 경로가 아니면 정산으로 보되, 길드가 없으면 헬퍼를 기본으로 둔다
+ * — 404 같은 공용 화면에서 정산 탭을 띄워봐야 온보딩으로 튕길 뿐이다.
+ */
+function currentProductKey(pathname: string, hasGuild: boolean): ProductKey {
+  if (HELPER_NAV.some((item) => pathname.startsWith(item.to))) return 'helper';
+  if (SETTLEMENT_NAV.some((item) => pathname.startsWith(item.to))) return 'settlement';
+  return hasGuild ? 'settlement' : 'helper';
+}
 
 /**
  * 상단 탑바 — 사이드바 없는 SaaS 셸.
@@ -58,13 +104,17 @@ const HELPER_NAV: readonly NavItem[] = [
 export function TopNav() {
   const { theme, toggleTheme } = useThemeStore();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   /**
    * 길드가 없는 사용자도 이 셸을 쓴다 (MERGE_PLAN 함정 7).
    * useCurrentGuild 는 길드가 없으면 빈 Guild 를 돌려주므로, 분기하지 않으면
-   * 스위처가 이름 없는 빈 껍데기로 그려지고 정산 탭들이 온보딩으로 튕긴다.
+   * 스위처가 이름 없는 빈 껍데기로 그려진다.
    */
   const hasGuild = useGuildStore((s) => s.guilds.length > 0);
-  const navItems = hasGuild ? SETTLEMENT_NAV : HELPER_NAV;
+  const productKey = currentProductKey(pathname, hasGuild);
+  const product = PRODUCTS.find((p) => p.key === productKey)!;
+  const navItems = product.nav;
+  const isSettlement = productKey === 'settlement';
 
   return (
     <header className="border-border-subtle bg-bg-card/95 sticky top-0 z-30 border-b backdrop-blur">
@@ -76,17 +126,28 @@ export function TopNav() {
               <Logo />
             </div>
             <span className="text-text-primary hidden text-base font-semibold sm:inline">
-              정산 매니저
+              메월드
             </span>
           </div>
           <div className="bg-border-subtle mx-1 h-5 w-px" />
-          {hasGuild ? <GuildSwitcher /> : <CreateGuildButton />}
+          {/* 제품 스위처 — 이미 로그인 상태라 전환 장벽이 0 이다 (MERGE_PLAN §6) */}
+          <ProductSwitcher current={product} hasGuild={hasGuild} />
+          {/* 길드 스위처는 정산에서만. 헬퍼는 길드와 무관한 제품이다 */}
+          {isSettlement &&
+            (hasGuild ? (
+              <>
+                <div className="bg-border-subtle mx-1 h-5 w-px" />
+                <GuildSwitcher />
+              </>
+            ) : (
+              <CreateGuildButton />
+            ))}
         </div>
 
         <div className="flex items-center gap-1.5">
           <BetaPill />
           {/* 매뉴얼은 정산 사용법 문서다. 길드가 없으면 눌러도 온보딩으로 튕긴다. */}
-          {hasGuild && (
+          {isSettlement && hasGuild && (
             <button
               aria-label="매뉴얼"
               className="text-text-secondary hover:bg-bg-hover rounded-md p-2"
@@ -136,9 +197,78 @@ export function TopNav() {
 }
 
 /**
- * 길드가 없을 때 길드 스위처 자리를 대신한다.
- * 3단계에서 여기가 제품 스위처(정산 ↔ 파티모집)로 확장된다 — MERGE_PLAN §6.
+ * 제품 스위처 — 정산 ↔ 헬퍼 (MERGE_PLAN §6).
+ *
+ * 교차 홍보 수단 중 배너보다 강한 쪽이다. 이미 로그인한 상태라 전환 장벽이 0 이고,
+ * 같은 SPA 안이라 페이지 이동조차 없다(경로 방식을 고른 이유 중 하나 — §9).
+ *
+ * 정산으로 갈 때 길드가 없으면 온보딩부터 거친다. 대시보드로 바로 보내면
+ * RequireAuth 가 어차피 튕겨서 사용자는 이유를 모른 채 온보딩에 떨어진다.
  */
+function ProductSwitcher({ current, hasGuild }: { current: Product; hasGuild: boolean }) {
+  const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const targetOf = (p: Product) => (p.key === 'settlement' && !hasGuild ? '/onboarding' : p.home);
+
+  return (
+    <div className="relative">
+      <button
+        aria-label="제품 전환"
+        className="hover:bg-bg-hover flex items-center gap-2 rounded-md px-2 py-1.5 text-left"
+        onClick={() => setOpen((v) => !v)}
+        type="button"
+      >
+        <span className="bg-brand-50 text-brand-700 flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
+          <current.Icon className="h-4 w-4" />
+        </span>
+        <span className="text-text-primary hidden text-sm font-semibold sm:block">
+          {current.label}
+        </span>
+        <ChevronsUpDown className="text-text-tertiary h-4 w-4" />
+      </button>
+
+      {open && (
+        <>
+          <button
+            aria-hidden
+            className="fixed inset-0 z-10 cursor-default"
+            onClick={() => setOpen(false)}
+            tabIndex={-1}
+            type="button"
+          />
+          <div className="border-border-subtle bg-bg-card absolute top-full left-0 z-20 mt-1 w-56 rounded-lg border p-1 shadow-lg">
+            <p className="text-text-muted px-2 py-1.5 text-xs font-medium">제품 전환</p>
+            {PRODUCTS.map((p) => (
+              <button
+                key={p.key}
+                className="hover:bg-bg-hover flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left"
+                onClick={() => {
+                  setOpen(false);
+                  navigate(targetOf(p));
+                }}
+                type="button"
+              >
+                <span className="bg-brand-50 text-brand-700 flex h-6 w-6 items-center justify-center rounded-md">
+                  <p.Icon className="h-3.5 w-3.5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="text-text-primary block truncate text-sm font-medium">
+                    {p.label}
+                  </span>
+                  <span className="text-text-tertiary block truncate text-xs">{p.note}</span>
+                </span>
+                {p.key === current.key && <Check className="text-brand-600 h-4 w-4" />}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** 정산 제품인데 길드가 아직 없을 때 길드 스위처 자리를 대신한다 */
 function CreateGuildButton() {
   const navigate = useNavigate();
   return (

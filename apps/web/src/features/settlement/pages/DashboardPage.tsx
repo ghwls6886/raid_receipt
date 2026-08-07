@@ -1,9 +1,15 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, TrendingUp, Wallet, CalendarDays, Crown, ArrowRight } from 'lucide-react';
+import { Plus, TrendingUp, Wallet, CalendarDays, Crown, ArrowRight, Timer } from 'lucide-react';
+import { CrossProductNudge } from '@/components/common/CrossProductNudge';
 import { useCurrentGuild } from '@/stores/useGuildStore';
-import { getDashboardStats, getRaids, getBossAverages, getMemberStats } from '@/features/settlement/api';
+import {
+  getDashboardStats,
+  getRaids,
+  getBossAverages,
+  getMemberStats,
+} from '@/features/settlement/api';
 import { formatMesoCompact } from '@/lib/format';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
@@ -89,7 +95,12 @@ export function DashboardPage() {
             Icon={Wallet}
             tone="brand"
           />
-          <StatTile label="레이드 횟수" value={`${stats.raidCount}회`} Icon={CalendarDays} tone="brand" />
+          <StatTile
+            label="레이드 횟수"
+            value={`${stats.raidCount}회`}
+            Icon={CalendarDays}
+            tone="brand"
+          />
           <StatTile
             label="참여도 1위"
             value={stats.topContributor?.name ?? '—'}
@@ -115,7 +126,9 @@ export function DashboardPage() {
               yFormat={formatMesoCompact}
             />
           ) : (
-            <p className="text-text-muted py-8 text-center text-sm">확정 레이드가 쌓이면 표시됩니다.</p>
+            <p className="text-text-muted py-8 text-center text-sm">
+              확정 레이드가 쌓이면 표시됩니다.
+            </p>
           )}
         </Card>
 
@@ -206,6 +219,21 @@ export function DashboardPage() {
           />
         )}
       </Card>
+
+      {/*
+        문맥 넛지 (MERGE_PLAN §6) — 정산 → 헬퍼.
+        헬퍼 데이터를 조회해 "이미 쓰는 사람"을 걸러내지는 않는다. 그러려면 정산 화면이
+        features/helper 를 import 해야 하는데 §4.1 원칙 3 위반이다.
+        대신 닫으면 다시 안 뜨는 것으로 반복 노출을 막는다.
+      */}
+      <CrossProductNudge
+        ctaLabel="헬퍼 보기"
+        description="캐릭터별 보스 재입장 시각과 일간·주간 숙제를 챙겨 줍니다. 같은 계정으로 바로 쓸 수 있어요."
+        Icon={Timer}
+        id="settlement-to-helper"
+        title="보스 쿨타임과 숙제도 챙기시나요?"
+        to="/characters"
+      />
     </div>
   );
 }

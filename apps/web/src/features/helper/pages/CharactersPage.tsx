@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { UserPlus } from 'lucide-react';
+import { Receipt, UserPlus } from 'lucide-react';
 import {
   addCharacter,
   deactivateCharacter,
@@ -10,6 +10,8 @@ import {
 } from '@/features/helper/api';
 import { toast } from '@/stores/useToastStore';
 import { confirm } from '@/stores/useConfirmStore';
+import { useGuildStore } from '@/stores/useGuildStore';
+import { CrossProductNudge } from '@/components/common/CrossProductNudge';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/popup/Modal';
@@ -25,6 +27,8 @@ const CHARACTERS_KEY = ['characters'] as const;
  */
 export function CharactersPage() {
   const queryClient = useQueryClient();
+  // 넛지 조건용. 공용 스토어라 feature 간 import 가 아니다 (§4.1 원칙 3)
+  const hasGuild = useGuildStore((s) => s.guilds.length > 0);
   const { data: characters = [], isLoading } = useQuery({
     queryKey: CHARACTERS_KEY,
     queryFn: getCharacters,
@@ -120,6 +124,24 @@ export function CharactersPage() {
         <LoadingState />
       ) : (
         <CharacterList characters={characters} onDeactivate={handleDeactivate} onEdit={openEdit} />
+      )}
+
+      {/*
+        문맥 넛지 (MERGE_PLAN §6) — 헬퍼 → 정산.
+        캐릭터를 등록했다는 건 이 제품을 실제로 쓰기 시작했다는 뜻이고, 그때가 다른 제품을
+        꺼낼 타이밍이다. 빈 화면에서 먼저 들이밀면 광고가 된다.
+        길드가 이미 있으면 정산을 쓰고 있다는 뜻이라 띄우지 않는다.
+      */}
+      {!isLoading && characters.length > 0 && !hasGuild && (
+        <CrossProductNudge
+          className="mt-6"
+          ctaLabel="정산 매니저 보기"
+          description="드랍템·경비·패널티를 자동으로 나누고 디스코드로 영수증을 보냅니다. 같은 계정으로 바로 쓸 수 있어요."
+          Icon={Receipt}
+          id="helper-to-settlement"
+          title="길드 레이드 정산도 하시나요?"
+          to="/settlement"
+        />
       )}
 
       <Modal
