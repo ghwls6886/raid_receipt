@@ -293,9 +293,14 @@ apps/web/src/
       ↳ 보스 마스터 정본을 seed 가 아니라 마이그레이션에 뒀다 — seed 는 운영에서 실행되지 않는데
         helper 코드는 슬러그 id 를 전제한다
       ↳ FE 영향 없음: `getBosses`/`getServers` 는 컬럼명이 같고 쓰기 경로는 전부 관리자 전용 스텁이다
-- [ ] **`pnpm db:types` 재생성 → `database.types.ts`** ← Docker 미가동으로 미실행. 적용 전 필수
-      ↳ `pnpm db:start && pnpm db:reset && pnpm db:types`
-      ↳ 0012 는 아직 **어떤 DB 에도 적용되지 않았다**. 실행 검증 전이다
+- [x] **0012 를 배포 Supabase 에 적용** (2026-08-07) — Docker 없이 `--linked` 로 원격 직행
+      ↳ 적용 전 저장소 **밖**에 덤프 확보. `auth` 스키마엔 리프레시 토큰·이메일이 들어 있어
+        저장소 안에 두면 안 된다. 이후 백업은 `--schema public` 으로 뜬다
+      ↳ 결과: 보스 8종 슬러그 id, `legacy-` 0건, `boss_entries` 1건이 `'horntail'` 로 이관
+      ↳ 핑크빈·카오스 핑크빈은 24 → 168시간(WEEKLY)으로 정규화. 기존 24 는 아무도 설정한 적 없는
+        `0002` 의 컬럼 기본값이었다
+- [x] `pnpm db:types:remote` 재생성 → `database.types.ts` (1,229 → 1,259줄)
+      ↳ 기존 `db:types` 는 `--local` 고정이라 원격용 스크립트를 추가했다
 
 ### 2단계 — 개인 도구 이식
 
