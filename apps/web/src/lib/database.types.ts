@@ -566,6 +566,39 @@ export type Database = {
           },
         ]
       }
+      manner_profiles: {
+        Row: {
+          dislike_count: number
+          like_count: number
+          neutral_count: number
+          rating_count: number
+          sticker_counts: Json
+          temperature: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          dislike_count?: number
+          like_count?: number
+          neutral_count?: number
+          rating_count?: number
+          sticker_counts?: Json
+          temperature?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          dislike_count?: number
+          like_count?: number
+          neutral_count?: number
+          rating_count?: number
+          sticker_counts?: Json
+          temperature?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       members: {
         Row: {
           created_at: string
@@ -1060,6 +1093,360 @@ export type Database = {
           },
         ]
       }
+      rating_session_participants: {
+        Row: {
+          job: string
+          level: number
+          nickname: string
+          session_id: string
+          stat_attack: number | null
+          user_id: string
+        }
+        Insert: {
+          job?: string
+          level?: number
+          nickname: string
+          session_id: string
+          stat_attack?: number | null
+          user_id: string
+        }
+        Update: {
+          job?: string
+          level?: number
+          nickname?: string
+          session_id?: string
+          stat_attack?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rating_session_participants_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "rating_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rating_sessions: {
+        Row: {
+          category: string
+          created_at: string
+          expires_at: string
+          id: string
+          post_id: string | null
+          post_title: string
+          trigger: string
+          triggered_by_nickname: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          post_id?: string | null
+          post_title: string
+          trigger: string
+          triggered_by_nickname?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          post_id?: string | null
+          post_title?: string
+          trigger?: string
+          triggered_by_nickname?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rating_sessions_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "recruit_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recruit_applications: {
+        Row: {
+          character_id: string
+          created_at: string
+          id: string
+          message: string | null
+          post_id: string
+          spec_text: string | null
+          stat_attack: number | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          character_id: string
+          created_at?: string
+          id?: string
+          message?: string | null
+          post_id: string
+          spec_text?: string | null
+          stat_attack?: number | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          character_id?: string
+          created_at?: string
+          id?: string
+          message?: string | null
+          post_id?: string
+          spec_text?: string | null
+          stat_attack?: number | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recruit_applications_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recruit_applications_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "recruit_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recruit_history: {
+        Row: {
+          category: string
+          id: string
+          joined_at: string
+          leave_reason: string
+          left_at: string
+          post_id: string | null
+          post_title: string
+          role: string
+          server_name: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          id?: string
+          joined_at: string
+          leave_reason: string
+          left_at?: string
+          post_id?: string | null
+          post_title: string
+          role: string
+          server_name?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          id?: string
+          joined_at?: string
+          leave_reason?: string
+          left_at?: string
+          post_id?: string | null
+          post_title?: string
+          role?: string
+          server_name?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recruit_history_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "recruit_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recruit_messages: {
+        Row: {
+          created_at: string
+          id: string
+          message: string
+          nickname: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message: string
+          nickname: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string
+          nickname?: string
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recruit_messages_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "recruit_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recruit_post_members: {
+        Row: {
+          character_id: string
+          id: string
+          joined_at: string
+          post_id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          character_id: string
+          id?: string
+          joined_at?: string
+          post_id: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          character_id?: string
+          id?: string
+          joined_at?: string
+          post_id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recruit_post_members_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recruit_post_members_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "recruit_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recruit_posts: {
+        Row: {
+          buff_skills: Json
+          buff_started_at: string | null
+          category: string
+          character_id: string
+          created_at: string
+          id: string
+          leader_id: string
+          leader_spec: string | null
+          leader_stat_attack: number | null
+          max_members: number
+          required_stat_attack: number | null
+          server_name: string
+          spec_description: string | null
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          buff_skills?: Json
+          buff_started_at?: string | null
+          category: string
+          character_id: string
+          created_at?: string
+          id?: string
+          leader_id: string
+          leader_spec?: string | null
+          leader_stat_attack?: number | null
+          max_members?: number
+          required_stat_attack?: number | null
+          server_name: string
+          spec_description?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          buff_skills?: Json
+          buff_started_at?: string | null
+          category?: string
+          character_id?: string
+          created_at?: string
+          id?: string
+          leader_id?: string
+          leader_spec?: string | null
+          leader_stat_attack?: number | null
+          max_members?: number
+          required_stat_attack?: number | null
+          server_name?: string
+          spec_description?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recruit_posts_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recruit_ratings: {
+        Row: {
+          created_at: string
+          id: string
+          rater_id: string
+          session_id: string
+          sticker_ids: string[]
+          target_id: string
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          rater_id: string
+          session_id: string
+          sticker_ids?: string[]
+          target_id: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          rater_id?: string
+          session_id?: string
+          sticker_ids?: string[]
+          target_id?: string
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recruit_ratings_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "rating_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subsidy_types: {
         Row: {
           amount: number
@@ -1157,7 +1544,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_recruit_application: {
+        Args: { p_application_id: string }
+        Returns: undefined
+      }
       auth_user_guilds: { Args: never; Returns: string[] }
+      close_recruit_post: { Args: { p_post_id: string }; Returns: string }
       confirm_settlement: {
         Args: { p_raid_id: string }
         Returns: {
@@ -1237,9 +1629,45 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_rating_session: {
+        Args: {
+          p_post_id: string
+          p_trigger: string
+          p_triggered_by: string
+          p_user_ids: string[]
+        }
+        Returns: string
+      }
+      create_recruit_post: {
+        Args: {
+          p_category: string
+          p_character_id: string
+          p_leader_spec?: string
+          p_leader_stat_attack?: number
+          p_max_members: number
+          p_required_stat_attack?: number
+          p_server_name: string
+          p_spec_description?: string
+          p_title: string
+        }
+        Returns: string
+      }
       delete_raid: { Args: { p_raid_id: string }; Returns: undefined }
       get_webhook_url: { Args: { p_guild_id: string }; Returns: string }
       is_admin: { Args: never; Returns: boolean }
+      is_rating_participant: {
+        Args: { p_session_id: string }
+        Returns: boolean
+      }
+      kick_recruit_member: {
+        Args: { p_post_id: string; p_user_id: string }
+        Returns: string
+      }
+      leave_recruit_post: { Args: { p_post_id: string }; Returns: string }
+      record_recruit_history: {
+        Args: { p_post_id: string; p_reason: string; p_user_ids: string[] }
+        Returns: undefined
+      }
       redeem_invite: {
         Args: { p_code: string; p_display_name?: string }
         Returns: {
@@ -1298,6 +1726,15 @@ export type Database = {
       }
       set_webhook_url: {
         Args: { p_guild_id: string; p_url: string }
+        Returns: undefined
+      }
+      submit_recruit_rating: {
+        Args: {
+          p_session_id: string
+          p_sticker_ids: string[]
+          p_target_id: string
+          p_value: string
+        }
         Returns: undefined
       }
       update_account_role: {
