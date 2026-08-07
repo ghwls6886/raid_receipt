@@ -345,10 +345,34 @@ apps/web/src/
 ### 3단계 — 랜딩·도메인
 
 - [ ] 랜딩 3분할 + 허브 신규 — §5
-- [ ] 제품 스위처 (TopNav)
+- [ ] 제품 스위처 (TopNav) — 1단계에서 만든 `CreateGuildButton` 자리가 여기로 확장된다
 - [ ] 문맥 넛지 2곳
 - [ ] 도메인 연결, Supabase Auth 의 허용 리다이렉트 URL 갱신
 - [ ] **광고·공유 링크를 `/party` · `/settlement` 로 교체** ← 여기서 전환이 갈린다
+
+**Vercel → Cloudflare Pages 전환** (2026-08-07 결정)
+
+호스팅 교체는 이 앱에 거의 영향이 없다. 순수 정적 SPA 라서다 — SSR·서버리스 함수가
+0건이고 Vercel 전용 패키지 의존도 없다. 백엔드는 전부 Supabase 에 있다
+(DB · Auth · `discord-send` Edge Function). 빌드 산출물은 `apps/web/dist/` 의
+`index.html` + `assets/` 뿐이다.
+
+- [ ] **SPA 폴백** — `apps/web/public/_redirects` 생성:
+      ```
+      /*    /index.html   200
+      ```
+      `apps/web/vercel.json` 의 rewrite 와 같은 역할이다. 이게 없으면 `/characters` 로
+      직접 들어왔을 때 404 가 난다 (React Router 가 뜨기 전에 호스팅이 먼저 응답한다)
+- [ ] **빌드 설정** — pnpm 모노레포다
+      - Build command: `pnpm install && pnpm build`
+      - Output directory: `apps/web/dist`
+      - Root directory: 저장소 루트
+      - `package.json` 의 `packageManager: pnpm@10.29.2` 를 Cloudflare 가 인식하는지 확인
+- [ ] **환경변수** `VITE_SUPABASE_URL` · `VITE_SUPABASE_ANON_KEY`
+      — 빌드 타임에 번들로 들어가므로 Production/Preview **양쪽에** 넣어야 한다
+- [ ] **Supabase Auth 리다이렉트 URL** — 새 도메인 + `*.pages.dev`(프리뷰) 등록.
+      이건 Cloudflare 때문이 아니라 도메인이 바뀌어서 필요한 것이고, 위 "도메인 연결"과 같은 작업이다
+- [ ] `vercel.json` 정리 여부 결정 (남겨둬도 Cloudflare 에서 무해)
 
 ### 4단계 — 구인 + 버프콜 (반응 보고 결정)
 
@@ -424,6 +448,18 @@ apps/web/src/
 - 테이블 명명은 **도메인 접두어**. `h_` 접두어와 `helper.` 스키마는 기각 (§3.2)
 - 코드는 `features/` 축으로 재편하고, 재편은 **이식 전에** 한다 (§4.1)
 - 랜딩 3개. 광고는 제품 랜딩으로 직행
+- **경로 방식 확정** — 도메인 1개 · 프로젝트 1개 · DB 1개, 경로로만 제품을 가른다 (2026-08-07)
+  - 근거는 비용이 아니라 **세션**이다. 서브도메인도 도메인은 1개면 되므로(DNS 레코드 추가는 무료)
+    구매 비용은 차이가 없다. 진짜 차이는 `lib/supabase.ts` 가 `createClient` 를 기본 설정으로
+    쓴다는 점이다 — supabase-js 가 세션을 **localStorage** 에 넣고(SETUP.md:172),
+    localStorage 는 **오리진 단위**다. `party.도메인` 과 `settle.도메인` 은 서로 다른 오리진이라
+    **세션이 공유되지 않는다.** 제품을 옮길 때마다 다시 로그인해야 한다
+  - 그건 §0 이 "합치는 첫 번째 이유"로 든 바로 그 문제다. Supabase 를 하나로 합쳐놓고
+    서브도메인으로 가르면 같은 고통을 그대로 겪는다
+  - 피하려면 세션 저장을 `.도메인` 쿠키로 바꾸는 커스텀 storage 어댑터가 필요한데,
+    인증 코드를 건드리는 일이라 지금 낼 비용이 아니다. 제품을 정말 갈라야 할 때 그때 한다
+  - 부수 효과: Supabase Auth 허용 리다이렉트 URL 이 1개면 되고,
+    제품 전환이 TopNav 스위처로 끝나 페이지 이동조차 없다
 - **랜딩은 3단계다.** 개인 도구 이식(2단계) 전에 만들면 CTA 가 가리킬 화면이 없어 빈 껍데기가 된다
 - 구인·채팅·매너**·버프콜**은 4단계로 분리 (버프콜은 2026-08-07 에 2단계에서 옮김 — §7 4단계)
 - 시스템 관리자는 `admins` 테이블 + `is_admin()` 하나로 간다 (2026-08-07 해소)
@@ -432,7 +468,7 @@ apps/web/src/
 **미결**
 
 - [ ] 도메인명
-- [ ] 경로 분리 vs 서브도메인 (§5 는 경로 전제)
+- [ ] Cloudflare Pages 배포 전환 (§7 3단계에 체크리스트)
 - [ ] 파티모집에 별도 액센트 색을 줄지 — 지금은 양쪽 다 주황이라 브랜드 패밀리는 이미 잡혀 있다
 - [ ] 허브의 다크모드 정책 (§5)
 - [ ] 보스 월별 이력 화면을 언제 옮길지 (§7 2단계 잔여)
