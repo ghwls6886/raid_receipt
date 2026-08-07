@@ -50,6 +50,7 @@ const HELPER_NAV: readonly NavItem[] = [
   { to: '/characters', label: '캐릭터', Icon: Sword, end: false },
   { to: '/checklist', label: '숙제', Icon: ListChecks, end: false },
   { to: '/boss-tracker', label: '보스 타이머', Icon: Timer, end: false },
+  { to: '/recruit', label: '파티 구인', Icon: Users, end: false },
 ];
 
 type ProductKey = 'settlement' | 'helper';

@@ -17,6 +17,8 @@ import { CharactersPage } from '@/features/helper/pages/CharactersPage';
 import { ChecklistPage } from '@/features/helper/pages/ChecklistPage';
 import { BossTrackerPage } from '@/features/helper/pages/BossTrackerPage';
 import { BossHistoryPage } from '@/features/helper/pages/BossHistoryPage';
+// 구인 — 헬퍼 제품의 기능 하나다 (MERGE_PLAN §7 4단계)
+import { RecruitPage } from '@/features/recruit/pages/RecruitPage';
 // 메인 기능 — 로그인 + 길드 선택 완료 후
 import { DashboardPage } from '@/features/settlement/pages/DashboardPage';
 import { RaidsPage } from '@/features/settlement/pages/RaidsPage';
@@ -76,6 +78,7 @@ function App() {
             <Route element={<ChecklistPage />} path="checklist" />
             <Route element={<BossTrackerPage />} path="boss-tracker" />
             <Route element={<BossHistoryPage />} path="boss-tracker/history" />
+            <Route element={<RecruitPage />} path="recruit" />
             <Route element={<NotFoundPage />} path="*" />
           </Route>
 
