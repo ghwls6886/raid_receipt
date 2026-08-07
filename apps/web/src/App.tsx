@@ -4,7 +4,9 @@ import { Layout } from '@/components/layout/Layout';
 import { RequireAuth } from '@/components/auth/RequireAuth';
 import { ErrorBoundary } from '@/components/feedback/ErrorBoundary';
 // 공개 화면 — 로그인 없이 접근
-import { LandingPage } from '@/pages/public/LandingPage';
+import { HubPage } from '@/pages/public/HubPage';
+import { SettlementLandingPage } from '@/pages/public/SettlementLandingPage';
+import { HelperLandingPage } from '@/pages/public/HelperLandingPage';
 import { TermsPage, PrivacyPage } from '@/pages/public/LegalPages';
 import { NotFoundPage } from '@/pages/public/NotFoundPage';
 // 인증 · 온보딩
@@ -38,7 +40,14 @@ function App() {
     <ErrorBoundary>
       <BrowserRouter>
         <Routes>
-          <Route element={<LandingPage />} path="/" />
+          {/*
+            랜딩 3분할 (MERGE_PLAN §5). 광고 클릭은 제품 랜딩으로 **직행**한다 —
+            허브를 중간에 끼우면 결정이 하나 늘고 거기서 전환이 샌다.
+            허브(/)는 퍼널 위가 아니라 옆에 있다: 검색·북마크로 직접 온 사람만 받는다.
+          */}
+          <Route element={<HubPage />} path="/" />
+          <Route element={<SettlementLandingPage />} path="/settlement" />
+          <Route element={<HelperLandingPage />} path="/helper" />
           <Route element={<TermsPage />} path="/terms" />
           <Route element={<PrivacyPage />} path="/privacy" />
           <Route element={<LoginPage />} path="/login" />

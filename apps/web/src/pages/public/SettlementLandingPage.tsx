@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Zap, Receipt, Swords, BarChart3, type LucideIcon } from 'lucide-react';
+import { Zap, Receipt, Swords, BarChart3, ArrowRight, type LucideIcon } from 'lucide-react';
 import { useAuthStore } from '@/stores/useAuthStore';
+import { useForceLightTheme } from '@/hooks/useForceLightTheme';
 import { Logo } from '@/components/common/Logo';
 
 interface Feature {
@@ -19,8 +20,13 @@ const FEATURES: Feature[] = [
 
 const BG_GRADIENT = 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 45%, #fdba74 100%)';
 
-/** 랜딩 (공개) — 주황 그라데이션 배경 + 가운데 글래스 카드. 다크모드 무관 라이트 고정 */
-export function LandingPage() {
+/**
+ * 정산 제품 랜딩 (공개) — 주황 그라데이션 + 가운데 글래스 카드.
+ *
+ * **광고 B 착지점** (MERGE_PLAN §5). 정산 광고를 보고 온 사람은 허브를 거치지 않고
+ * 바로 여기 떨어진다. 중간에 "둘 중 뭐 보실래요?"를 끼우면 결정이 하나 늘고 전환이 샌다.
+ */
+export function SettlementLandingPage() {
   const navigate = useNavigate();
   const session = useAuthStore((s) => s.session);
   const onboarded = useAuthStore((s) => s.onboarded);
@@ -38,27 +44,13 @@ export function LandingPage() {
     navigate(onboarded ? '/dashboard' : '/onboarding', { replace: true });
   }, [authLoading, session, onboarded, navigate]);
 
-  // 랜딩은 마케팅 화면이라 다크모드 설정과 무관하게 항상 라이트로 고정
-  useEffect(() => {
-    const root = document.documentElement;
-    const hadDark = root.classList.contains('dark');
-    const prevScheme = root.style.colorScheme;
-    const forceLight = () => {
-      if (root.classList.contains('dark')) root.classList.remove('dark');
-      if (root.style.colorScheme !== 'light') root.style.colorScheme = 'light';
-    };
-    forceLight();
-    const observer = new MutationObserver(forceLight);
-    observer.observe(root, { attributes: true, attributeFilter: ['class', 'style'] });
-    return () => {
-      observer.disconnect();
-      if (hadDark) root.classList.add('dark');
-      root.style.colorScheme = prevScheme;
-    };
-  }, []);
+  useForceLightTheme();
 
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden" style={{ background: BG_GRADIENT }}>
+    <div
+      className="relative flex min-h-screen flex-col overflow-hidden"
+      style={{ background: BG_GRADIENT }}
+    >
       {/* 배경 글로우 */}
       <div
         className="pointer-events-none absolute -right-28 -top-28 h-96 w-96 rounded-full opacity-40 blur-3xl"
@@ -97,8 +89,8 @@ export function LandingPage() {
                 이제 <span className="text-brand-600">10초컷</span>.
               </h1>
               <p className="text-text-secondary mx-auto mt-5 max-w-xl text-base leading-relaxed font-medium md:text-lg">
-                드랍템·용병비·재료비·패널티까지 자동으로 나누고, 디스코드로 영수증을 바로 보내는 메월드
-                길드 정산 매니저.
+                드랍템·용병비·재료비·패널티까지 자동으로 나누고, 디스코드로 영수증을 바로 보내는
+                메월드 길드 정산 매니저.
               </p>
             </div>
 
@@ -130,11 +122,28 @@ export function LandingPage() {
                 {ctaLabel}
               </button>
             </div>
+
+            {/*
+              교차 홍보 배너 — 반드시 CTA **아래**다 (MERGE_PLAN §5).
+              위로 올리면 주 전환(정산 시작)을 갉아먹는다. 제일 약한 수단이지만 공짜다.
+            */}
+            <div className="border-border-subtle mt-8 border-t pt-6 text-center">
+              <Link
+                className="text-text-secondary hover:text-brand-600 inline-flex items-center gap-1.5 text-sm font-medium transition-colors"
+                to="/helper"
+              >
+                길드 없이 혼자 쓰는 도구를 찾으시나요? 메월드 헬퍼 보기
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
           </div>
         </div>
       </main>
 
-      <footer className="relative space-y-1.5 py-6 text-center text-xs" style={{ color: '#9a3412' }}>
+      <footer
+        className="relative space-y-1.5 py-6 text-center text-xs"
+        style={{ color: '#9a3412' }}
+      >
         <div className="space-x-3 font-semibold">
           <Link to="/terms" className="hover:underline">
             이용약관

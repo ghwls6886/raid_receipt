@@ -93,7 +93,10 @@ export function PrivacyPage() {
         </ul>
       </Section>
       <Section title="2. 수집 및 이용 목적">
-        <p>회원 식별 및 로그인, 정산 영수증의 디스코드 발송, 공대원·정산 데이터 관리를 위해 이용합니다.</p>
+        <p>
+          회원 식별 및 로그인, 정산 영수증의 디스코드 발송, 공대원·정산 데이터 관리를 위해
+          이용합니다.
+        </p>
       </Section>
       <Section title="3. 보관 및 파기">
         <p>
