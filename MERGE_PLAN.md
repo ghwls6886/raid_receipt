@@ -333,15 +333,14 @@ apps/web/src/
       ↳ `useBosses` 의 하드코딩 폴백은 **가져오지 않았다**. 마스터의 진실은 `bosses` 하나여야 한다
       ↳ `.single()` 오류 삼킴 1곳(`toggleBossTracking`)을 `.maybeSingle()` 로 교체
       ↳ `components/ui/Toggle` 신규(공용), `lib/date.ts` 에 `toDatetimeLocal` 추가
-- [ ] **버프콜** — `buff-call` 8 컴포넌트, `useAudioAlert` · `useWakeLock`,
-      `lib/audio.ts` · `buffTimer.ts` · `buffTimerRunner.ts`,
-      **`workers/buff-timer.worker.ts` + `workers/types.ts`**, `stores/useBuffCallStore.ts`
-      → 공대 실전 도구라 정산과 궁합이 제일 좋다. 지금 제품의 빈칸.
-      ⚠️ **워커를 빠뜨리기 쉽다.** `buffTimerRunner.ts:18` 이
-      `new Worker(new URL('@/workers/buff-timer.worker.ts', import.meta.url), { type: 'module' })`
-      형태라 **Vite 가 별칭(`@/`)을 정적 해석해야** 번들에 포함된다. RR `vite.config.ts` 의 alias 설정을
-      먼저 확인하고, 안 잡히면 상대경로로 바꾼다. 개발 서버에선 되는데 프로덕션 빌드에서 죽는 유형이다.
-- [ ] MH `api-*.ts` 를 RR `lib/api.ts` 규약에 맞춰 이식 → `features/helper/api.ts` (타입 적용, §4.1)
+- [x] MH `api-*.ts` 를 RR 규약에 맞춰 이식 → `features/helper/api.ts` (타입 적용, §4.1)
+
+> ~~버프콜~~ → **4단계로 이동** (2026-08-07). 아래 §7 4단계 참고.
+> 2단계에 넣은 것이 분류 오류였다 — 실물은 정산 공대가 아니라 **구인 파티**에 붙어 있다.
+
+**2단계 완료.** 길드 없는 사용자가 쓸 화면이 캐릭터·숙제·보스타이머 3개 생겼다.
+남은 조각 하나: **보스 월별 이력 화면**(`BossCalendarView` + `BossHistoryPage` 219줄,
+`getBossEntriesByMonth`). 타이머 본체와 독립적인 조회 화면이라 미뤘다.
 
 ### 3단계 — 랜딩·도메인
 
@@ -351,11 +350,43 @@ apps/web/src/
 - [ ] 도메인 연결, Supabase Auth 의 허용 리다이렉트 URL 갱신
 - [ ] **광고·공유 링크를 `/party` · `/settlement` 로 교체** ← 여기서 전환이 갈린다
 
-### 4단계 — 구인 (반응 보고 결정)
+### 4단계 — 구인 + 버프콜 (반응 보고 결정)
 
-- [ ] `0014_helper_recruit.sql`
+- [ ] `0015_helper_recruit.sql` ← **번호 주의.** `0014` 는 `0014_admin_master_write.sql` 이 가져갔다
 - [ ] 파티 구인 · 지원 · 파티 채팅(realtime) · 매너 평가
 - [ ] realtime 동시접속 200(무료 한도)이 여기서 걸린다 — §8
+- [ ] **버프콜** — 2단계에서 옮겨왔다 (2026-08-07)
+
+**왜 버프콜이 여기인가** — 원래 2단계에 "공대 실전 도구라 정산과 궁합이 좋다"고 적어뒀는데
+실물을 열어보니 정산 공대가 아니라 **구인 파티**에 붙어 있었다. 함정 1(`parties` 는 이름만
+같고 다른 개념)에 계획서가 스스로 걸린 셈이다. 근거 넷:
+
+1. **독립 라우트가 없다.** maple_helper `App.tsx` 에 buff-call 경로가 없고,
+   `BuffCallPanel` 은 `PartyDetailPage.tsx:261` 한 곳에서 `isMember && !isClosed` 로만 렌더된다
+2. **DB 가 `parties` 에 붙어 있다** — `parties.buff_skills jsonb`(MH 0012),
+   `parties.buff_started_at timestamptz`(MH 0015). 스킬 구성과 실행 시각이 파티 행에 저장된다
+3. **동작 모델이 파티 전제다.** 파티장만 편집·시작할 수 있고 파티원은 `syncTimer(startedAt)` 로
+   파티가 공유하는 기준 시각을 따라간다
+4. `useUpdateBuffSkills` · `useUpdateBuffTimer` 가 파티 API 훅이다
+
+이식 대상 (4단계에서 `recruit_*` 와 함께):
+
+- 컴포넌트 8 — `BuffCallPanel` · `BuffCallModal` 만 파티 의존, 나머지 6개
+  (`BuffTimerHost` · `BuffTimerDisplay` · `BuffSkillSetup` · `BuffSkillCard`
+  · `BuffPresetManager` · `AudioSettingsModal`)는 독립
+- `stores/useBuffCallStore.ts` — `skills`·`presets`·`isRunning`·`startedAt` 은 전부 로컬
+  (localStorage). 파티 연동은 `syncTimer` + 훅 2개로 위에 얹은 층이다
+- 훅 `useAudioAlert` · `useWakeLock` · `useNotification`
+- `lib/audio.ts` · `buffTimer.ts` · `buffTimerRunner.ts`
+- **`workers/buff-timer.worker.ts` + `workers/types.ts`**
+  ⚠️ **워커를 빠뜨리기 쉽다.** `buffTimerRunner.ts:18` 이
+  `new Worker(new URL('@/workers/buff-timer.worker.ts', import.meta.url), { type: 'module' })`
+  형태라 **Vite 가 별칭(`@/`)을 정적 해석해야** 번들에 포함된다. 안 잡히면 상대경로로 바꾼다.
+  개발 서버에선 되는데 프로덕션 빌드에서 죽는 유형이다.
+
+> 대안으로 검토했다가 접은 것: 파티 동기화 층을 걷어낸 **개인용 심콜 타이머**.
+> 독립 컴포넌트 6개와 워커가 그대로 쓰여 비용은 낮지만, 버프콜의 가치는 "파티 전원이 같은
+> 타이밍에 버프를 받는" 협업에 있어서 혼자 쓰는 버전은 일부만 남는다. 4단계에서 제대로 한다.
 
 ## 8. 무료 티어 예산과 업그레이드 트리거
 
@@ -394,7 +425,9 @@ apps/web/src/
 - 코드는 `features/` 축으로 재편하고, 재편은 **이식 전에** 한다 (§4.1)
 - 랜딩 3개. 광고는 제품 랜딩으로 직행
 - **랜딩은 3단계다.** 개인 도구 이식(2단계) 전에 만들면 CTA 가 가리킬 화면이 없어 빈 껍데기가 된다
-- 구인·채팅·매너는 4단계로 분리
+- 구인·채팅·매너**·버프콜**은 4단계로 분리 (버프콜은 2026-08-07 에 2단계에서 옮김 — §7 4단계)
+- 시스템 관리자는 `admins` 테이블 + `is_admin()` 하나로 간다 (2026-08-07 해소)
+- 가입 훅은 `handle_new_user()` **한 함수**가 정산 링크와 helper 프로필을 둘 다 한다 (2026-08-07 해소)
 
 **미결**
 
@@ -402,5 +435,15 @@ apps/web/src/
 - [ ] 경로 분리 vs 서브도메인 (§5 는 경로 전제)
 - [ ] 파티모집에 별도 액센트 색을 줄지 — 지금은 양쪽 다 주황이라 브랜드 패밀리는 이미 잡혀 있다
 - [ ] 허브의 다크모드 정책 (§5)
-- [ ] MH `RequireAdmin` · `AdminBossPage` · `AdminServersPage` 를 RR `AdminPage` · `admins` 테이블과 어떻게 합칠지
-- [ ] `user_profiles.id` ↔ `guild_accounts` 연결 규칙 (§3.1)
+- [ ] 보스 월별 이력 화면을 언제 옮길지 (§7 2단계 잔여)
+
+**해소된 미결**
+
+- ~~MH `RequireAdmin` · `AdminBossPage` · `AdminServersPage` 를 RR `AdminPage` · `admins` 와 합치는 방법~~
+  → 0013 에서 `user_profiles.is_admin` 컬럼을 **가져오지 않기로** 결정. RR 의 `admins` 테이블 +
+  `is_admin()` 이 단일 진실원천이고, 0014 가 그 위에 마스터 쓰기 권한을 얹었다.
+  helper 의 `useIsAdmin` 훅은 이식할 때 `is_admin()` RPC 로 바꾼다
+- ~~`user_profiles.id` ↔ `guild_accounts` 연결 규칙 (§3.1)~~
+  → 0013 에서 `handle_new_user()` 를 **병합**해 해소. 가입 시 한 함수가
+  ① email 로 `guild_accounts.user_id` 를 채우고(정산 초대) ② `user_profiles` 행을 만든다(helper).
+  두 제품이 같은 이름의 함수를 같은 트리거에 걸고 있어서, 덮어썼으면 초대 링크가 조용히 죽었다
