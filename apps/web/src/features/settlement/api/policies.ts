@@ -1,5 +1,5 @@
 /**
- * 길드 정산 정책 — 기본 설정 · 패널티 · 역할 지원금
+ * 길드 정산 정책 — 기본 설정 · 디스코드 웹훅 · 패널티 · 역할 지원금
  */
 import { supabase, throwIfError } from '@/lib/supabase';
 
@@ -20,6 +20,33 @@ export async function getGuildSettings(guildId: string): Promise<GuildSettings> 
     ppojiRate: data?.ppoji_rate ?? 0,
     defaultFeePct: data?.default_fee_pct ?? 5,
   };
+}
+
+// ─── 디스코드 웹훅 ──────────────────────────────────────────
+// 웹훅 URL 은 비밀값이라 `guilds` 의 일반 SELECT 에서 빠져 있다 (0004 의 column-level GRANT).
+// 읽기·쓰기 모두 OWNER/ADMIN 전용 RPC 를 거쳐야 하고, MEMBER 가 호출하면 예외가 난다.
+// 그래서 화면은 권한을 먼저 확인하고 호출해야 한다.
+
+export async function getWebhookUrl(guildId: string): Promise<string> {
+  const { data, error } = await supabase.rpc('get_webhook_url', { p_guild_id: guildId });
+  throwIfError(error);
+  return data ?? '';
+}
+
+/**
+ * 빈 문자열은 삭제로 취급한다 — RPC 가 null 을 받으면 audit 에 '삭제'로 남는다.
+ *
+ * `p_url` 캐스트가 필요한 이유: `p_url text` 는 DB 에서 nullable 인데
+ * supabase 타입 생성기가 RPC 인자의 nullability 를 표현하지 못해 `string` 으로만 뽑힌다.
+ * 런타임은 null 을 정상 처리하므로 여기서만 타입을 맞춰 준다.
+ */
+export async function setWebhookUrl(guildId: string, url: string): Promise<void> {
+  const trimmed = url.trim();
+  const { error } = await supabase.rpc('set_webhook_url', {
+    p_guild_id: guildId,
+    p_url: (trimmed === '' ? null : trimmed) as string,
+  });
+  throwIfError(error);
 }
 
 // ─── 패널티 정책 ────────────────────────────────────────────

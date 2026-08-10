@@ -66,11 +66,23 @@ Deno.serve(async (req: Request) => {
 
     if (!raid) return json({ ok: false, error: '레이드를 찾을 수 없습니다.' }, 404);
     if (!guild?.webhook_url) {
-      return json({ ok: false, error: '디스코드 웹훅이 설정되지 않았습니다.' }, 404);
+      // code 를 같이 준다. 화면이 이 경우만 "설정하러 갈까요?" 로 안내하려면
+      // 메시지 문자열 비교밖에 방법이 없는데, 문구를 고치는 순간 조용히 깨진다.
+      return json(
+        { ok: false, code: 'WEBHOOK_MISSING', error: '디스코드 웹훅이 설정되지 않았습니다.' },
+        404,
+      );
     }
 
+    // 참여자별 내역. 닉네임은 members 임베드로 가져오고, 용병은 guest_name 을 쓴다.
+    // 실패해도 요약만으로 발송한다 — 영수증이 아예 안 나가는 것보다 낫다.
+    const { data: participants } = await supabase
+      .from('raid_participants')
+      .select('*, members(nickname)')
+      .eq('raid_id', raidId)
+      .order('sort_order');
+
     // ── 4) 발송 ──
-    const meso = (n: number) => Number(n ?? 0).toLocaleString('ko-KR');
     const res = await fetch(guild.webhook_url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -79,8 +91,10 @@ Deno.serve(async (req: Request) => {
         embeds: [
           {
             title: `${raid.boss_name} 레이드 정산`,
+            description: raid.party_name ? `${raid.party_name} · ${raid.date}` : `${raid.date}`,
             color: 0xf97316,
             fields: [
+              // 두괄식. inline 3개가 상단에 한 줄로 붙어 총액이 제일 먼저 읽힌다.
               { name: '총 순수익', value: `${meso(raid.net_profit)} 메소`, inline: true },
               { name: '1인당', value: `${meso(raid.per_person)} 메소`, inline: true },
               { name: '참여', value: `${raid.participant_count}명`, inline: true },
@@ -103,6 +117,7 @@ Deno.serve(async (req: Request) => {
                     },
                   ]
                 : []),
+              ...participantFields(participants ?? []),
             ],
             // 재발송이면 같은 내용이 채널에 여러 번 뜬다. 몇 번째인지 남겨
             // 보는 사람이 "정산이 바뀐 건가" 하고 헷갈리지 않게 한다.
@@ -143,4 +158,100 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { 'Content-Type': 'application/json' },
   });
+}
+
+function meso(n: number): string {
+  return Number(n ?? 0).toLocaleString('ko-KR');
+}
+
+// 디스코드 embed 제약. 넘기면 400 이 떨어져 영수증이 통째로 안 나가므로 여기서 자른다.
+const FIELD_VALUE_MAX = 1024;
+const MAX_PARTICIPANT_FIELDS = 18; // 요약 필드(최대 5) + 참여자 = embed 필드 25 이내
+const INDENT = '  '; // EM SPACE ×2. 디스코드는 일반 공백 들여쓰기를 접는다
+
+interface ParticipantRow {
+  member_id: string | null;
+  guest_name: string | null;
+  members: { nickname: string } | { nickname: string }[] | null;
+  subsidy: number;
+  penalty: number;
+  redistributed: number;
+  sale_incentive: number;
+  incentive: number;
+  leftover_share: number;
+  final_amount: number;
+  forfeited: boolean;
+  is_leader: boolean;
+  exit_phase: number | null;
+}
+
+/**
+ * 참여자 이름. 길드원이면 members 임베드의 닉네임, 용병이면 guest_name 에 (용병) 표시.
+ *
+ * PostgREST 는 many-to-one 임베드를 객체로 주지만 클라이언트 버전에 따라 배열로 오는
+ * 경우가 있어 양쪽을 다 받는다. 길드원이 탈퇴하면 member_id 가 null 로 풀려(0001 의
+ * on delete set null) 이름이 사라지므로 그때는 guest_name 도 없어 폴백이 필요하다.
+ */
+function nameOf(p: ParticipantRow): string {
+  const m = Array.isArray(p.members) ? p.members[0] : p.members;
+  if (m?.nickname) return m.nickname;
+  if (p.guest_name) return `${p.guest_name}(용병)`;
+  return '(탈퇴한 길드원)';
+}
+
+/** 기본 n빵에서 벗어난 항목만 적는다. 전부 0이면 두 번째 줄 자체를 만들지 않는다. */
+function adjustmentsOf(p: ParticipantRow): string {
+  const parts: string[] = [];
+  if (p.subsidy > 0) parts.push(`지원금 +${meso(p.subsidy)}`);
+  if (p.sale_incentive > 0) parts.push(`판매인센 +${meso(p.sale_incentive)}`);
+  if (p.incentive > 0) parts.push(`뽀찌 +${meso(p.incentive)}`);
+  if (p.redistributed > 0) parts.push(`재분배 +${meso(p.redistributed)}`);
+  if (p.leftover_share > 0) parts.push(`잔액 +${meso(p.leftover_share)}`);
+  if (p.penalty > 0) parts.push(`벌금 -${meso(p.penalty)}`);
+
+  const notes: string[] = [];
+  if (p.exit_phase != null) notes.push(`${p.exit_phase}페 이탈`);
+  if (p.forfeited) notes.push('몰수');
+
+  const line = parts.join(' · ');
+  if (notes.length === 0) return line;
+  return line ? `${line}  ※${notes.join('·')}` : `※${notes.join('·')}`;
+}
+
+/**
+ * 참여자 목록을 embed 필드로. 1024자를 넘으면 이어지는 필드로 쪼갠다.
+ *
+ * 한 필드에 다 밀어 넣으면 인원이 많은 공대에서 디스코드가 400 으로 거절한다.
+ * 이어지는 필드 이름은 zero-width space — 디스코드가 빈 이름을 허용하지 않는데
+ * 여기에 '참여자 (2)' 같은 걸 넣으면 목록이 끊긴 것처럼 읽힌다.
+ */
+function participantFields(rows: ParticipantRow[]): { name: string; value: string }[] {
+  if (rows.length === 0) return [];
+
+  const lines = rows.map((p) => {
+    const crown = p.is_leader ? '👑 ' : '· ';
+    const head = `${crown}**${nameOf(p)}** — **${meso(p.final_amount)}**`;
+    const adj = adjustmentsOf(p);
+    return adj ? `${head}\n${INDENT}${adj}` : head;
+  });
+
+  const chunks: string[] = [];
+  let buf = '';
+  for (const line of lines) {
+    const next = buf ? `${buf}\n${line}` : line;
+    if (next.length > FIELD_VALUE_MAX) {
+      if (buf) chunks.push(buf);
+      buf = line;
+    } else {
+      buf = next;
+    }
+  }
+  if (buf) chunks.push(buf);
+
+  const shown = chunks.slice(0, MAX_PARTICIPANT_FIELDS);
+  const fields = shown.map((value, i) => ({ name: i === 0 ? '참여자' : '​', value }));
+  if (chunks.length > shown.length) {
+    fields.push({ name: '​', value: '…이하 생략 (웹에서 전체 확인)' });
+  }
+  return fields;
 }

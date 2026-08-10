@@ -6,7 +6,10 @@
 - 계정·대시보드 클릭 순서(최초 1회) → [supabase/SETUP.md](supabase/SETUP.md)
 - 일상 CLI 명령 → [supabase/README.md](supabase/README.md)
 
-**현재 위치: P8 (클라우드 + 배포) — P3(구글 OAuth)는 사용자 수동 작업 필요**
+**현재 위치: P8 잔여 P8-3 · P8-5 — P3(구글 OAuth)와 함께 사용자 수동 작업 필요**
+
+> 2026-08-10 실측으로 P8-1·P8-2·P8-4 를 체크했다. 작업은 진작 끝났는데 체크박스만 밀려 있었다.
+> 남은 건 도메인이 정해져야 할 수 있는 것들(구글 리디렉션 URI, Site URL)뿐이다.
 
 ---
 
@@ -22,7 +25,7 @@
 | P5 | saveRaid + confirm_settlement | 4~6시간 | P4 | ✅ |
 | P6 | discord-send 연결 | 2~3시간 | P5 | ✅ |
 | P7 | 대시보드 집계 + audit_logs | 3~4시간 | P4 | ✅ |
-| P8 | 클라우드 프로젝트 + 배포 | 2시간 | P6 | ⬜ |
+| P8 | 클라우드 프로젝트 + 배포 | 2시간 | P6 | 🔶 P8-3·P8-5 남음 |
 
 P3는 P0 끝나면 언제든 병렬로 가능(구글 콘솔 작업이라 코드와 무관). 나머지는 순차.
 
@@ -163,13 +166,18 @@ P3(구글) 전에 반드시 끝내야 한다.
 
 절차는 [SETUP.md §③](supabase/SETUP.md).
 
-- [ ] **P8-1** 프로젝트 생성 (Seoul 리전 / DB 비밀번호 **비밀번호 관리자에 저장**)
-- [ ] **P8-2** `supabase link` → `db push` → `seed.sql`은 대시보드 SQL Editor에 직접 실행
+- [x] **P8-1** 프로젝트 생성 (Seoul 리전 / DB 비밀번호 **비밀번호 관리자에 저장**) ✅
+- [x] **P8-2** `supabase link` → `db push` → `seed.sql`은 대시보드 SQL Editor에 직접 실행 ✅
       (`db push`에 포함 안 됨)
+      ↳ 링크는 `supabase/.temp/project-ref` 로 확인. 0012·0013 을 `--linked` 로 원격 직행 적용
+        (MERGE_PLAN §7 1·2단계)
 - [ ] **P8-3** 구글 리디렉션 URI에 `https://<ref>.supabase.co/auth/v1/callback` 추가,
       대시보드 Auth 설정
-- [ ] **P8-4** `functions deploy discord-send` + `service_role` 키를 **Edge Function 환경변수로만**
-- [ ] **P8-5** Vercel 환경변수 → 배포 → 실도메인으로 Site URL 갱신
+- [x] **P8-4** `functions deploy discord-send` + `service_role` 키를 **Edge Function 환경변수로만** ✅
+      ↳ 2026-08-10 확인: `functions list` 기준 status=ACTIVE, verify_jwt=true.
+        같은 날 영수증 양식(참여자별 내역) 개편분을 배포해 version 4
+- [ ] **P8-5** 호스팅 환경변수 → 배포 → 실도메인으로 Site URL 갱신
+      ↳ 호스팅은 Vercel → Cloudflare Pages 전환 예정 (MERGE_PLAN §7 3단계)
 
 > ⚠️ `VITE_` 접두사 값은 프론트 번들에 박혀 브라우저에 노출된다. `service_role` 키는 RLS를
 > 전부 무시하는 마스터 키라 절대 넣으면 안 된다.

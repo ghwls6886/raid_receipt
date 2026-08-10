@@ -3,7 +3,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { useCurrentGuild } from '@/stores/useGuildStore';
-import { deleteRaid, getRaids, resendReceipt, type RaidRow } from '@/features/settlement/api';
+import {
+  deleteRaid,
+  getRaids,
+  resendReceipt,
+  isWebhookMissingError,
+  type RaidRow,
+} from '@/features/settlement/api';
 import { confirm } from '@/stores/useConfirmStore';
 import { toast } from '@/stores/useToastStore';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -156,7 +162,20 @@ export function RaidsPage() {
       await queryClient.invalidateQueries({ queryKey: ['raids', guild.id] });
       toast.success('디스코드로 발송했습니다.');
     } catch (e: unknown) {
-      // 웹훅 미설정·디스코드 거절·권한 부족이 전부 여기로 온다. 사유를 그대로 보여준다.
+      // 웹훅 미설정은 사용자가 바로 고칠 수 있는 유일한 실패라 안내를 따로 준다.
+      // 나머지(디스코드 거절·권한 부족)는 조치가 달라 사유만 그대로 보여준다.
+      if (isWebhookMissingError(e)) {
+        const goSettings = await confirm.show({
+          title: '디스코드 웹훅이 설정되지 않았습니다',
+          message:
+            '영수증을 보낼 채널이 아직 등록되지 않았습니다. 길드 설정 → 디스코드 웹훅에서 URL을 넣고 저장하면 발송됩니다.\n\n웹훅 URL 만드는 법은 매뉴얼 → 길드 설정에 정리돼 있습니다.',
+          confirmText: '설정하러 가기',
+          cancelText: '나중에',
+          type: 'warning',
+        });
+        if (goSettings) navigate('/settings');
+        return;
+      }
       const detail = e instanceof Error ? e.message : '';
       toast.error(detail ? `발송에 실패했습니다. (${detail})` : '발송에 실패했습니다.');
     }

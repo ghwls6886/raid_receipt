@@ -17,6 +17,8 @@ import {
   removeAccount,
   getAuditLogs,
   logAudit,
+  getWebhookUrl,
+  setWebhookUrl,
   type PenaltyCalcType,
   type PenaltyType,
   type SubsidyType,
@@ -138,10 +140,42 @@ const WEBHOOK_TEST_PAYLOAD = {
   ],
 };
 
-/** 디스코드 웹훅 — 실제 URL로 텍스트 테스트 전송 */
+/**
+ * 디스코드 웹훅 — 저장(RPC) + 실제 URL로 텍스트 테스트 전송
+ *
+ * 저장은 `set_webhook_url` RPC 를 거친다. `guilds.webhook_url` 은 비밀값이라
+ * 일반 SELECT 에서 빠져 있어(0004) 직접 update 할 수 없다.
+ * 읽기도 같은 이유로 OWNER/ADMIN 전용이라 MEMBER 에게는 카드 자체를 보여주지 않는다 —
+ * 보여줘 봐야 조회에서 예외가 나고 저장도 거부된다.
+ */
 function DiscordCard() {
-  const [url, setUrl] = useState('');
+  const guild = useCurrentGuild();
+  const queryClient = useQueryClient();
+  const canManage = guild.myRole !== 'MEMBER';
+
+  const { data: savedUrl, isLoading } = useQuery({
+    queryKey: ['webhook', guild.id],
+    queryFn: () => getWebhookUrl(guild.id),
+    enabled: canManage && guild.id !== '',
+  });
+
+  // 저장된 값이 폼의 초기값이다. 편집을 시작하기 전(draft === null)에는 서버 값을 그대로 보여준다.
+  const [draft, setDraft] = useState<string | null>(null);
+  const url = draft ?? savedUrl ?? '';
+  const isDirty = draft !== null && draft.trim() !== (savedUrl ?? '');
+
   const [sending, setSending] = useState(false);
+
+  const save = useMutation({
+    mutationFn: () => setWebhookUrl(guild.id, url),
+    onSuccess: () => {
+      setDraft(null);
+      void queryClient.invalidateQueries({ queryKey: ['webhook', guild.id] });
+      void queryClient.invalidateQueries({ queryKey: ['audit', guild.id] });
+      toast.success(url.trim() ? '웹훅 URL을 저장했습니다.' : '웹훅 URL을 삭제했습니다.');
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const test = async () => {
     const target = url.trim();
@@ -165,20 +199,35 @@ function DiscordCard() {
     }
   };
 
+  if (!canManage) return null;
+
   return (
     <Card className="space-y-3 p-5">
       <h2 className="text-card-title">디스코드 웹훅</h2>
-      <Input
-        placeholder="https://discord.com/api/webhooks/..."
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-      />
-      <Button className="shrink-0" onClick={test} disabled={sending}>
-        <Send className="h-4 w-4" /> 테스트 전송
-      </Button>
-      <p className="text-text-tertiary text-xs leading-relaxed">
-        브라우저에서 직접 보내는 텍스트 테스트입니다. 실제 영수증 이미지 발송은 서버에서 처리됩니다.
-      </p>
+      {isLoading ? (
+        <LoadingState />
+      ) : (
+        <>
+          <Input
+            placeholder="https://discord.com/api/webhooks/..."
+            value={url}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+          <div className="flex gap-2">
+            <Button onClick={() => save.mutate()} disabled={!isDirty || save.isPending}>
+              저장
+            </Button>
+            <Button variant="secondary" onClick={test} disabled={sending}>
+              <Send className="h-4 w-4" /> 테스트 전송
+            </Button>
+          </div>
+          <p className="text-text-tertiary text-xs leading-relaxed">
+            <strong>저장해야</strong> 영수증이 이 채널로 발송됩니다. 테스트 전송은 브라우저에서
+            디스코드로 직접 보내는 것이라, 저장하지 않아도 성공하지만 실제 발송 경로는 검증하지
+            않습니다.
+          </p>
+        </>
+      )}
     </Card>
   );
 }

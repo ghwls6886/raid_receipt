@@ -207,13 +207,35 @@ export function canDeleteRaid(raid: RaidRow, userId: string | null, role: Accoun
  * (웹훅 URL 미설정, 디스코드 4xx) invoke 의 error 만 보면 실패를 놓친다.
  * 본문의 ok 까지 확인해야 "보냈다고 했는데 안 온" 상황을 잡을 수 있다.
  */
+// 필드를 본문에 선언한다 — 생성자 파라미터 프로퍼티는 erasableSyntaxOnly 에서 막힌다.
+export class ReceiptSendError extends Error {
+  readonly code?: string;
+
+  constructor(message: string, code?: string) {
+    super(message);
+    this.name = 'ReceiptSendError';
+    this.code = code;
+  }
+}
+
+/**
+ * 웹훅 미설정만 "설정하러 갈까요?" 로 안내한다.
+ * 디스코드 4xx·권한 부족은 사용자가 할 수 있는 조치가 달라 같이 묶으면 안 된다.
+ */
+export function isWebhookMissingError(e: unknown): boolean {
+  return e instanceof ReceiptSendError && e.code === 'WEBHOOK_MISSING';
+}
+
 async function sendReceipt(guildId: string, raidId: string): Promise<void> {
-  const { data, error } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>(
-    'discord-send',
-    { body: { guildId, raidId } },
-  );
-  if (error) throw new Error(error.message);
-  if (!data?.ok) throw new Error(data?.error ?? '디스코드가 요청을 거절했습니다.');
+  const { data, error } = await supabase.functions.invoke<{
+    ok?: boolean;
+    code?: string;
+    error?: string;
+  }>('discord-send', { body: { guildId, raidId } });
+  if (error) throw new ReceiptSendError(error.message);
+  if (!data?.ok) {
+    throw new ReceiptSendError(data?.error ?? '디스코드가 요청을 거절했습니다.', data?.code);
+  }
 }
 
 /**
