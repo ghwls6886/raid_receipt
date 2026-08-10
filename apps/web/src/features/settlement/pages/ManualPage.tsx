@@ -16,6 +16,7 @@ import {
   Check,
   ArrowRight,
   ArrowLeft,
+  Webhook,
 } from 'lucide-react';
 import {
   QUICK_START_STEPS,
@@ -38,6 +39,7 @@ const ICON_BY_ID: Record<string, LucideIcon> = {
   raids: ScrollText,
   'raid-new': Plus,
   settings: Settings,
+  'discord-webhook': Webhook,
   admin: Wrench,
 };
 

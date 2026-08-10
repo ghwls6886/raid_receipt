@@ -228,7 +228,7 @@ function DiscordCard() {
             않습니다.
           </p>
           <Link
-            to="/manual#settings"
+            to="/manual#discord-webhook"
             className="text-brand-600 hover:text-brand-700 inline-flex items-center gap-1.5 text-xs font-medium hover:underline"
           >
             <BookOpen className="h-3.5 w-3.5 shrink-0" />

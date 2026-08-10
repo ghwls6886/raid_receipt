@@ -168,7 +168,7 @@ export function RaidsPage() {
         const goSettings = await confirm.show({
           title: '디스코드 웹훅이 설정되지 않았습니다',
           message:
-            '영수증을 보낼 채널이 아직 등록되지 않았습니다. 길드 설정 → 디스코드 웹훅에서 URL을 넣고 저장하면 발송됩니다.\n\n웹훅 URL 만드는 법은 매뉴얼 → 길드 설정에 정리돼 있습니다.',
+            '영수증을 보낼 채널이 아직 등록되지 않았습니다. 길드 설정 → 디스코드 웹훅에서 URL을 넣고 저장하면 발송됩니다.\n\n만드는 절차는 매뉴얼 → 화면별 안내 → [디스코드 웹훅 URL 설정 방법]에 있습니다. 길드 설정 화면에도 바로 가는 링크가 있습니다.',
           confirmText: '설정하러 가기',
           cancelText: '나중에',
           type: 'warning',
