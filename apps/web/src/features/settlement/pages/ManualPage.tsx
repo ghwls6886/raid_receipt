@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
 import {
   BookOpen,
@@ -42,6 +43,17 @@ const ICON_BY_ID: Record<string, LucideIcon> = {
 
 type TabId = 'start' | 'rules' | 'screens';
 
+/**
+ * 해시가 가리키는 섹션이 어느 탭에 있는지. 탭이 로컬 state 라 `/manual#settings` 로
+ * 들어와도 기본 탭('시작하기')이 그려져 대상이 DOM 에 없다. 탭부터 맞춰야 스크롤이 먹는다.
+ */
+function tabForSection(id: string): TabId | null {
+  if (!id) return null;
+  if (RULE_SECTIONS.some((s) => s.id === id)) return 'rules';
+  if (SCREEN_SECTIONS.some((s) => s.id === id)) return 'screens';
+  return null;
+}
+
 const TABS: Array<{ id: TabId; label: string; hint: string; Icon: LucideIcon }> = [
   { id: 'start', label: '시작하기', hint: '순서대로 한 사이클', Icon: BookOpen },
   { id: 'rules', label: '정산 규칙', hint: '숫자가 나오는 과정', Icon: Calculator },
@@ -50,7 +62,21 @@ const TABS: Array<{ id: TabId; label: string; hint: string; Icon: LucideIcon }> 
 
 /** 사용 매뉴얼 — 튜토리얼 / 정산 규칙 / 화면 레퍼런스 (콘텐츠는 lib/manual.ts) */
 export function ManualPage() {
-  const [tab, setTab] = useState<TabId>('start');
+  const { hash } = useLocation();
+  const targetId = hash.replace(/^#/, '');
+  const [tab, setTab] = useState<TabId>(() => tabForSection(targetId) ?? 'start');
+
+  // 해시로 들어왔을 때 탭을 맞추고 그 섹션까지 내려 준다.
+  // 탭 전환이 그려진 뒤라야 대상이 DOM 에 있어서 한 프레임 미룬다.
+  useEffect(() => {
+    const next = tabForSection(targetId);
+    if (!next) return;
+    setTab(next);
+    const raf = requestAnimationFrame(() => {
+      document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [targetId]);
 
   return (
     <div>

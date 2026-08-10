@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2, Copy, Send } from 'lucide-react';
+import { Plus, Trash2, Copy, Send, BookOpen } from 'lucide-react';
 import { toast } from '@/stores/useToastStore';
 import { confirm } from '@/stores/useConfirmStore';
 import { useCurrentGuild, useGuildStore } from '@/stores/useGuildStore';
@@ -226,6 +227,13 @@ function DiscordCard() {
             디스코드로 직접 보내는 것이라, 저장하지 않아도 성공하지만 실제 발송 경로는 검증하지
             않습니다.
           </p>
+          <Link
+            to="/manual#settings"
+            className="text-brand-600 hover:text-brand-700 inline-flex items-center gap-1.5 text-xs font-medium hover:underline"
+          >
+            <BookOpen className="h-3.5 w-3.5 shrink-0" />
+            디스코드 웹훅 URL 만드는 방법
+          </Link>
         </>
       )}
     </Card>
