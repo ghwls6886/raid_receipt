@@ -22,6 +22,7 @@ import {
   QUICK_START_STEPS,
   RULE_SECTIONS,
   SCREEN_SECTIONS,
+  WHY_SECTION,
   type ManualExample,
   type QuickStartStep,
   type RuleSection,
@@ -59,7 +60,8 @@ function tabForSection(id: string): TabId | null {
 const TABS: Array<{ id: TabId; label: string; hint: string; Icon: LucideIcon }> = [
   { id: 'start', label: '시작하기', hint: '순서대로 한 사이클', Icon: BookOpen },
   { id: 'rules', label: '정산 규칙', hint: '숫자가 나오는 과정', Icon: Calculator },
-  { id: 'screens', label: '화면별 안내', hint: '기능 레퍼런스', Icon: MapPin },
+  // '화면별' 이 아니게 됐다 — 디스코드 웹훅 설정처럼 화면이 아닌 작업 항목이 섞였다
+  { id: 'screens', label: '기능별 안내', hint: '화면 · 작업 레퍼런스', Icon: MapPin },
 ];
 
 /** 사용 매뉴얼 — 튜토리얼 / 정산 규칙 / 화면 레퍼런스 (콘텐츠는 lib/manual.ts) */
@@ -134,7 +136,10 @@ function QuickStartPanel() {
 
   return (
     <div ref={topRef} className="scroll-mt-32">
-      <StepNav current={idx} onSelect={go} />
+      <RuleCard section={WHY_SECTION} />
+      <div className="mt-5">
+        <StepNav current={idx} onSelect={go} />
+      </div>
       <StepBody step={step} />
 
       <div className="mt-4 flex items-center justify-between gap-3">
