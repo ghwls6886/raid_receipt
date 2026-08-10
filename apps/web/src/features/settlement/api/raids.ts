@@ -226,13 +226,40 @@ export function isWebhookMissingError(e: unknown): boolean {
   return e instanceof ReceiptSendError && e.code === 'WEBHOOK_MISSING';
 }
 
+interface ReceiptResponse {
+  ok?: boolean;
+  code?: string;
+  error?: string;
+}
+
+/**
+ * 비-2xx 응답의 본문을 꺼낸다.
+ *
+ * functions.invoke 는 응답이 2xx 가 아니면 data 를 null 로 두고 FunctionsHttpError 를
+ * 준다(FunctionsClient `if (!response.ok) throw new FunctionsHttpError(response)`).
+ * 그래서 웹훅 미설정(404)의 code 는 data 가 아니라 error.context 에 들어 있다.
+ * data.code 만 보면 영원히 잡히지 않는다.
+ */
+async function readErrorBody(error: unknown): Promise<ReceiptResponse | null> {
+  const context = (error as { context?: unknown }).context;
+  if (!(context instanceof Response)) return null;
+  try {
+    return (await context.clone().json()) as ReceiptResponse;
+  } catch {
+    // 함수까지 못 갔거나(게이트웨이 오류) 본문이 JSON 이 아닌 경우
+    return null;
+  }
+}
+
 async function sendReceipt(guildId: string, raidId: string): Promise<void> {
-  const { data, error } = await supabase.functions.invoke<{
-    ok?: boolean;
-    code?: string;
-    error?: string;
-  }>('discord-send', { body: { guildId, raidId } });
-  if (error) throw new ReceiptSendError(error.message);
+  const { data, error } = await supabase.functions.invoke<ReceiptResponse>('discord-send', {
+    body: { guildId, raidId },
+  });
+
+  if (error) {
+    const body = await readErrorBody(error);
+    throw new ReceiptSendError(body?.error ?? error.message, body?.code);
+  }
   if (!data?.ok) {
     throw new ReceiptSendError(data?.error ?? '디스코드가 요청을 거절했습니다.', data?.code);
   }
