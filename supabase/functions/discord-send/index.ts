@@ -15,7 +15,25 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+// CORS. functions.invoke 는 Authorization 과 Content-Type: application/json 을 실어서
+// 브라우저가 반드시 OPTIONS preflight 를 먼저 보낸다. 그걸 받아 주지 않으면 본 요청이
+// 아예 나가지 않는다 — 이 함수가 브라우저에서 한 번도 성공하지 못한 이유다.
+//
+// Origin 을 '*' 로 두는 이유: 토큰은 localStorage 라 오리진 밖에서 못 읽고, 쿠키를 쓰지
+// 않아 credentials 도 필요 없다. 남의 사이트가 이 URL 을 불러도 유효한 JWT 가 없으면
+// 아래 1)에서 401 이고, 있어도 2) 소속 검사에서 걸린다. 도메인이 아직 안 정해졌고
+// 프리뷰 배포마다 오리진이 바뀌므로 목록으로 묶으면 조용히 깨진다.
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
+
   try {
     const { guildId, raidId } = await req.json();
     if (!guildId || !raidId) {
@@ -153,10 +171,15 @@ Deno.serve(async (req: Request) => {
   }
 });
 
+/**
+ * 모든 응답에 CORS 헤더를 싣는다. 성공만 붙이면 안 된다 —
+ * 헤더 없는 4xx 는 브라우저가 본문을 못 읽게 막아서, 화면이 code 를 보고
+ * "웹훅 설정하러 갈까요?" 로 안내하는 분기가 통째로 죽는다.
+ */
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
   });
 }
 
